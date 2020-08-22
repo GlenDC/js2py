@@ -1,0 +1,25 @@
+{
+  "name": "js2py",
+  "version": "0.1.0",
+  "description": "a Javascript to Python lib and CLI tool",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GlenDC/js2py.git"
+  },
+  "keywords": [
+    "transpiler",
+    "javascript",
+    "python",
+    "ast"
+  ],
+  "author": "Glen De Cauwsemaecker",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/GlenDC/js2py/issues"
+  },
+  "homepage": "https://github.com/GlenDC/js2py#readme"
+}
