@@ -6,7 +6,15 @@ class Token {
   }
 }
 
-class Identifier extends Token {
+class Empty extends Token {
+  constructor() {
+    super();
+  }
+
+  emit() {}
+}
+
+class RawToken extends Token {
   constructor(str) {
     super();
     this.str = str;
@@ -14,6 +22,43 @@ class Identifier extends Token {
 
   emit(ts) {
     ts.put(this.str);
+  }
+}
+
+class Identifier extends RawToken {}
+
+class None extends RawToken {
+  constructor() {
+    super("None");
+  }
+}
+
+class LiteralBoolean extends RawToken {
+  constructor(value) {
+    super(value ? "True" : "False");
+  }
+}
+
+class LiteralNumeric extends Token {
+  constructor(x) {
+    super();
+    this.x = x;
+  }
+
+  emit(ts) {
+    ts.putNumber(this.x);
+  }
+}
+
+class LiteralString extends Token {
+  constructor(str, delim) {
+    super();
+    this.str = str;
+    this.delim = delim;
+  }
+
+  emit(ts) {
+    ts.put(`${this.delim}${this.str}${this.delim}`);
   }
 }
 
@@ -52,12 +97,35 @@ class Sequence extends Token {
   }
 
   emit(ts, noIn) {
-    this.children.forEach((cr) => cr.emit(ts, noIn));
+    this.forEach((x) => x.emit(ts, noIn));
   }
 
   forEach(f) {
-    f(this);
     this.children.forEach((x) => x.forEach(f));
+  }
+}
+
+class TemplateExpression extends Token {
+  constructor(children) {
+    super();
+    this.children = children || [];
+  }
+
+  emit(ts) {
+    if (this.children.some((child) => child instanceof Identifier)) {
+      ts.put("f");
+    }
+    ts.put(`"`);
+    this.children.forEach((child) => {
+      if (child instanceof Identifier) {
+        ts.put("{");
+        child.emit(ts);
+        ts.put("}");
+      } else {
+        child.emit(ts);
+      }
+    });
+    ts.put(`"`);
   }
 }
 
@@ -78,6 +146,17 @@ class TODO extends Token {
 class PyCodeGen {
   constructor(opts) {
     this.opts = opts || {};
+  }
+
+  parenToAvoidBeingDirective(element, original) {
+    if (
+      element &&
+      element.type === "ExpressionStatement" &&
+      element.expression.type === "LiteralStringExpression"
+    ) {
+      return new Sequence(new RawTuple(original.children[0]), new EOL());
+    }
+    return original;
   }
 
   reduceArrayAssignmentTarget(node, elements) {
@@ -204,8 +283,9 @@ class PyCodeGen {
     return new TODO(node, "reduceDebuggerStatement");
   }
 
-  reduceDirective(node, elements) {
-    return new TODO(node, "reduceDirective");
+  reduceDirective(node) {
+    const delim = node.rawValue.match(/(^|[^\\])(\\\\)*"/) ? "'" : '"';
+    return new Sequence(new LiteralString(node.rawValue, delim), new EOL());
   }
 
   reduceDoWhileStatement(node, elements) {
@@ -293,6 +373,9 @@ class PyCodeGen {
 
   reduceIdentifierExpression(node, elements) {
     // TODO: what if name is `let, const, ...`???
+    if (node.name === "undefined") {
+      return new None();
+    }
     return new Identifier(node.name);
   }
 
@@ -316,20 +399,20 @@ class PyCodeGen {
     return new TODO(node, "reduceLabeledStatement");
   }
 
-  reduceLiteralBooleanExpression(node, elements) {
-    return new TODO(node, "reduceLiteralBooleanExpression");
+  reduceLiteralBooleanExpression(node) {
+    return new LiteralBoolean(node.value);
   }
 
   reduceLiteralInfinityExpression(node, elements) {
     return new TODO(node, "reduceLiteralInfinityExpression");
   }
 
-  reduceLiteralNullExpression(node, elements) {
-    return new TODO(node, "reduceLiteralNullExpression");
+  reduceLiteralNullExpression() {
+    return new None();
   }
 
-  reduceLiteralNumericExpression(node, elements) {
-    return new TODO(node, "reduceLiteralNumericExpression");
+  reduceLiteralNumericExpression(node) {
+    return new LiteralNumeric(node.value);
   }
 
   reduceLiteralRegExpExpression(node, elements) {
@@ -373,12 +456,12 @@ class PyCodeGen {
   }
 
   reduceScript(node, { directives, statements }) {
-    // if (statements.length) {
-    //   statements[0] = this.parenToAvoidBeingDirective(
-    //     node.statements[0],
-    //     statements[0]
-    //   );
-    // }
+    if (statements.length) {
+      statements[0] = this.parenToAvoidBeingDirective(
+        node.statements[0],
+        statements[0]
+      );
+    }
     return new Sequence(...directives, ...statements);
   }
 
@@ -431,11 +514,11 @@ class PyCodeGen {
   }
 
   reduceTemplateElement(node, elements) {
-    return new TODO(node, "reduceTemplateElement");
+    return new RawToken(node.rawValue);
   }
 
-  reduceTemplateExpression(node, elements) {
-    return new TODO(node, "reduceTemplateExpression");
+  reduceTemplateExpression(node, { tag, elements }) {
+    return new TemplateExpression(elements);
   }
 
   reduceThisExpression(node, elements) {
