@@ -1,18 +1,65 @@
 class Token {
-  constructor(token) {
-    this.token = token;
+  constructor() {}
+
+  forEach(f) {
+    f(this);
+  }
+}
+
+class EOL extends Token {
+  constructor() {
+    super();
+  }
+
+  emit(ts) {
+    ts.put("\n");
+  }
+}
+
+class RawTuple extends Token {
+  constructor(expression) {
+    super();
+    this.expression = expression;
+  }
+
+  emit(ts) {
+    ts.put("(");
+    this.expression.emit(ts);
+    ts.put(")");
+  }
+
+  forEach(f) {
+    f(this);
+    this.expression.forEach(f);
+  }
+}
+
+class Sequence extends Token {
+  constructor(children) {
+    super();
+    this.children = children || [];
+  }
+
+  emit(ts, noIn) {
+    this.children.forEach((cr) => cr.emit(ts, noIn));
+  }
+
+  forEach(f) {
+    f(this);
+    this.children.forEach((x) => x.forEach(f));
   }
 }
 
 class TODO extends Token {
-  constructor(token, reduceFunc) {
-    super(token);
+  constructor(element, reduceFunc) {
+    super();
+    this.element = element;
     this.reduceFunc = reduceFunc;
   }
 
   emit(ts) {
     ts.put(
-      `raise Exception("TODO: support token '${this.token.result}' via '${this.reduceFunc}'")\n`
+      `raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")\n`
     );
   }
 }
@@ -186,8 +233,12 @@ class PyCodeGen {
     return new TODO(node, "reduceExportLocals");
   }
 
-  reduceExpressionStatement(node, elements) {
-    return new TODO(node, "reduceExpressionStatement");
+  reduceExpressionStatement(node, { expression }) {
+    const needsParens =
+      expression.startsWithCurly ||
+      expression.startsWithLetSquareBracket ||
+      expression.startsWithFunctionOrClass;
+    return new Sequence(needsParens ? new RawTuple(expression) : expression, new EOL());
   }
 
   reduceForAwaitStatement(node, elements) {
@@ -306,8 +357,14 @@ class PyCodeGen {
     return new TODO(node, "reduceReturnStatement");
   }
 
-  reduceScript(node, elements) {
-    return new TODO(node, "reduceScript");
+  reduceScript(node, { directives, statements }) {
+    // if (statements.length) {
+    //   statements[0] = this.parenToAvoidBeingDirective(
+    //     node.statements[0],
+    //     statements[0]
+    //   );
+    // }
+    return new Sequence(...directives, ...statements);
   }
 
   reduceSetter(node, elements) {
