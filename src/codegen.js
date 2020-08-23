@@ -404,6 +404,7 @@ class PyCodeGen {
   }
 
   reduceLiteralInfinityExpression(node, elements) {
+    // TODO: do as float('inf'), for that we'll need to support function calls :)
     return new TODO(node, "reduceLiteralInfinityExpression");
   }
 
@@ -416,11 +417,13 @@ class PyCodeGen {
   }
 
   reduceLiteralRegExpExpression(node, elements) {
+    // TOOD: for this we need to support import statements, as we'll need to `import re`...
+    // we'll also need to support support method calls, to do whatever need to be able to do
     return new TODO(node, "reduceLiteralRegExpExpression");
   }
 
   reduceLiteralStringExpression(node, elements) {
-    return new TODO(node, "reduceLiteralStringExpression");
+    return new TODO(node, "reduceLiteralRegExpExpression");
   }
 
   reduceMethod(node, elements) {
@@ -572,6 +575,50 @@ class PyCodeGen {
   reduceYieldGeneratorExpression(node, elements) {
     return new TODO(node, "reduceYieldGeneratorExpression");
   }
+}
+
+function escapeStringLiteral(stringValue) {
+  let result = "";
+  let nSingle = 0,
+    nDouble = 0;
+  for (let i = 0, l = stringValue.length; i < l; ++i) {
+    let ch = stringValue[i];
+    if (ch === '"') {
+      ++nDouble;
+    } else if (ch === "'") {
+      ++nSingle;
+    }
+  }
+  let delim = nDouble > nSingle ? "'" : '"';
+  result += delim;
+  for (let i = 0; i < stringValue.length; i++) {
+    let ch = stringValue.charAt(i);
+    switch (ch) {
+      case delim:
+        result += "\\" + delim;
+        break;
+      case "\n":
+        result += "\\n";
+        break;
+      case "\r":
+        result += "\\r";
+        break;
+      case "\\":
+        result += "\\\\";
+        break;
+      case "\u2028":
+        result += "\\u2028";
+        break;
+      case "\u2029":
+        result += "\\u2029";
+        break;
+      default:
+        result += ch;
+        break;
+    }
+  }
+  result += delim;
+  return result;
 }
 
 exports.PyCodeGen = PyCodeGen;
