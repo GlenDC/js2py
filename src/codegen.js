@@ -127,6 +127,10 @@ function getPrecedence(node) {
   }
 }
 
+function rawTupleIfNeeded(node, precedence, a) {
+  return getPrecedence(node) < precedence ? new RawTuple(a) : a;
+}
+
 class Token {
   constructor() {}
 
@@ -208,20 +212,21 @@ class EOL extends Token {
 }
 
 class RawTuple extends Token {
-  constructor(expression) {
+  constructor(...expressions) {
     super();
-    this.expression = expression;
+    this.expressions = expressions || [];
   }
 
   emit(ts) {
     ts.put("(");
-    this.expression.emit(ts);
+    if (this.expressions.length > 0) {
+      for (let i = 0; i < this.expressions.length - 1; i++) {
+        this.expressions[i].emit(ts);
+        ts.put(", ");
+      }
+      this.expressions[this.expressions.length - 1].emit(ts);
+    }
     ts.put(")");
-  }
-
-  forEach(f) {
-    f(this);
-    this.expression.forEach(f);
   }
 }
 
@@ -279,8 +284,8 @@ class TODO extends Token {
 }
 
 class PyCodeGen {
-  constructor(opts) {
-    this.opts = opts || {};
+  constructor({ ignoreConsoleCalls } = {}) {
+    this.ignoreConsoleCalls = ignoreConsoleCalls ? true : false;
   }
 
   parenToAvoidBeingDirective(element, original) {
@@ -389,8 +394,13 @@ class PyCodeGen {
     return new TODO(node, "reduceBreakStatement");
   }
 
-  reduceCallExpression(node, elements) {
-    return new TODO(node, "reduceCallExpression");
+  reduceCallExpression(node, { callee, arguments: args }) {
+    // TODO: support ignore console calls better,
+    // as aliasing and other indirect uses of console will still fail...
+    if (this.ignoreConsoleCalls && callee.children[0].str === 'console') {
+        return new Empty();
+    }
+    return new Sequence(callee, new RawTuple(...args));
   }
 
   reduceCatchClause(node, elements) {
@@ -646,8 +656,12 @@ class PyCodeGen {
     return new TODO(node, "reduceStaticMemberAssignmentTarget");
   }
 
-  reduceStaticMemberExpression(node, elements) {
-    return new TODO(node, "reduceStaticMemberExpression");
+  reduceStaticMemberExpression(node, { object }) {
+    return new Sequence(
+      rawTupleIfNeeded(node.object, getPrecedence(node), object),
+      new RawToken("."),
+      new Identifier(node.property)
+    );
   }
 
   reduceStaticPropertyName(node, elements) {

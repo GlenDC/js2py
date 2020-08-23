@@ -10,13 +10,13 @@ const { TokenStream } = require("./token-stream");
 //     }
 // }
 
-exports.transpile = function (script) {
+exports.transpile = function (script, opts) {
   let t = script;
   if (typeof t === "string" || t instanceof String) {
     t = parseScript(t);
   }
 
-  const generator = new PyCodeGen();
+  const generator = new PyCodeGen(opts);
   const rep = reduce(generator, t);
   const ts = new TokenStream();
   rep.emit(ts);
