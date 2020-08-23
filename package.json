@@ -2,9 +2,10 @@
   "name": "js2py",
   "version": "0.1.0",
   "description": "a Javascript to Python lib and CLI tool",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test.js",
+    "format": "prettier --write src/**/*.js"
   },
   "repository": {
     "type": "git",
@@ -23,7 +24,9 @@
   },
   "homepage": "https://github.com/GlenDC/js2py#readme",
   "dependencies": {
-    "shift-ast": "^6.1.0",
     "shift-parser": "^7.0.3"
+  },
+  "devDependencies": {
+    "prettier": "^2.0.5"
   }
 }
