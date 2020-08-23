@@ -6,6 +6,17 @@ class Token {
   }
 }
 
+class Identifier extends Token {
+  constructor(str) {
+    super();
+    this.str = str;
+  }
+
+  emit(ts) {
+    ts.put(this.str);
+  }
+}
+
 class EOL extends Token {
   constructor() {
     super();
@@ -238,7 +249,10 @@ class PyCodeGen {
       expression.startsWithCurly ||
       expression.startsWithLetSquareBracket ||
       expression.startsWithFunctionOrClass;
-    return new Sequence(needsParens ? new RawTuple(expression) : expression, new EOL());
+    return new Sequence(
+      needsParens ? new RawTuple(expression) : expression,
+      new EOL()
+    );
   }
 
   reduceForAwaitStatement(node, elements) {
@@ -278,7 +292,8 @@ class PyCodeGen {
   }
 
   reduceIdentifierExpression(node, elements) {
-    return new TODO(node, "reduceIdentifierExpression");
+    // TODO: what if name is `let, const, ...`???
+    return new Identifier(node.name);
   }
 
   reduceIfStatement(node, elements) {
