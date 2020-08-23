@@ -91,7 +91,7 @@ class RawTuple extends Token {
 }
 
 class Sequence extends Token {
-  constructor(children) {
+  constructor(...children) {
     super();
     this.children = children || [];
   }
@@ -203,8 +203,8 @@ class PyCodeGen {
     return new TODO(node, "reduceBinaryExpression");
   }
 
-  reduceBindingIdentifier(node, elements) {
-    return new TODO(node, "reduceBindingIdentifier");
+  reduceBindingIdentifier(node) {
+    return new Identifier(node.name);
   }
 
   reduceBindingPropertyIdentifier(node, elements) {
@@ -548,16 +548,23 @@ class PyCodeGen {
     return new TODO(node, "reduceUpdateExpression");
   }
 
-  reduceVariableDeclaration(node, elements) {
-    return new TODO(node, "reduceVariableDeclaration");
+  reduceVariableDeclaration(node, { declarators }) {
+    const elements = [];
+    declarators.forEach((declarator) => {
+      elements.push(declarator, new EOL());
+    });
+    return new Sequence(elements);
   }
 
-  reduceVariableDeclarationStatement(node, elements) {
-    return new TODO(node, "reduceVariableDeclarationStatement");
+  reduceVariableDeclarationStatement(node, { declaration }) {
+    return declaration;
   }
 
-  reduceVariableDeclarator(node, elements) {
-    return new TODO(node, "reduceVariableDeclarator");
+  reduceVariableDeclarator(node, { binding, init }) {
+    if (init === null) {
+      init = new None();
+    }
+    return new Sequence(binding, new RawToken(" = "), init);
   }
 
   reduceWhileStatement(node, elements) {
