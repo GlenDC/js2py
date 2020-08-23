@@ -1,3 +1,132 @@
+// TODO: check with Python docs
+const Precedence = {
+  Sequence: 0,
+  Yield: 1,
+  Assignment: 1,
+  Conditional: 2,
+  ArrowFunction: 2,
+  LogicalOR: 3,
+  LogicalAND: 4,
+  BitwiseOR: 5,
+  BitwiseXOR: 6,
+  BitwiseAND: 7,
+  Equality: 8,
+  Relational: 9,
+  BitwiseSHIFT: 10,
+  Additive: 11,
+  Multiplicative: 12,
+  Exponential: 13,
+  Prefix: 14,
+  Postfix: 15,
+  New: 16,
+  Call: 17,
+  TaggedTemplate: 18,
+  Member: 19,
+  Primary: 20,
+};
+
+const BinaryPrecedence = {
+  ",": Precedence.Sequence,
+  "||": Precedence.LogicalOR,
+  "&&": Precedence.LogicalAND,
+  "|": Precedence.BitwiseOR,
+  "^": Precedence.BitwiseXOR,
+  "&": Precedence.BitwiseAND,
+  "==": Precedence.Equality,
+  "!=": Precedence.Equality,
+  "===": Precedence.Equality,
+  "!==": Precedence.Equality,
+  "<": Precedence.Relational,
+  ">": Precedence.Relational,
+  "<=": Precedence.Relational,
+  ">=": Precedence.Relational,
+  in: Precedence.Relational,
+  instanceof: Precedence.Relational,
+  "<<": Precedence.BitwiseSHIFT,
+  ">>": Precedence.BitwiseSHIFT,
+  ">>>": Precedence.BitwiseSHIFT,
+  "+": Precedence.Additive,
+  "-": Precedence.Additive,
+  "*": Precedence.Multiplicative,
+  "%": Precedence.Multiplicative,
+  "/": Precedence.Multiplicative,
+  "**": Precedence.Exponential,
+};
+
+function getPrecedence(node) {
+  switch (node.type) {
+    case "ArrayExpression":
+    case "FunctionExpression":
+    case "ClassExpression":
+    case "IdentifierExpression":
+    case "AssignmentTargetIdentifier":
+    case "NewTargetExpression":
+    case "Super":
+    case "LiteralBooleanExpression":
+    case "LiteralNullExpression":
+    case "LiteralNumericExpression":
+    case "LiteralInfinityExpression":
+    case "LiteralRegExpExpression":
+    case "LiteralStringExpression":
+    case "ObjectExpression":
+    case "ThisExpression":
+    case "SpreadElement":
+    case "FunctionBody":
+      return Precedence.Primary;
+
+    case "ArrowExpression":
+    case "AssignmentExpression":
+    case "CompoundAssignmentExpression":
+    case "YieldExpression":
+    case "YieldGeneratorExpression":
+      return Precedence.Assignment;
+
+    case "ConditionalExpression":
+      return Precedence.Conditional;
+
+    case "ComputedMemberExpression":
+    case "StaticMemberExpression":
+    case "ComputedMemberAssignmentTarget":
+    case "StaticMemberAssignmentTarget":
+      switch (node.object.type) {
+        case "CallExpression":
+        case "ComputedMemberExpression":
+        case "StaticMemberExpression":
+        case "TemplateExpression":
+          return getPrecedence(node.object);
+        default:
+          return Precedence.Member;
+      }
+
+    case "TemplateExpression":
+      if (node.tag == null) return Precedence.Member;
+      switch (node.tag.type) {
+        case "CallExpression":
+        case "ComputedMemberExpression":
+        case "StaticMemberExpression":
+        case "TemplateExpression":
+          return getPrecedence(node.tag);
+        default:
+          return Precedence.Member;
+      }
+
+    case "BinaryExpression":
+      return BinaryPrecedence[node.operator];
+
+    case "CallExpression":
+      return Precedence.Call;
+    case "NewExpression":
+      return node.arguments.length === 0 ? Precedence.New : Precedence.Member;
+    case "UpdateExpression":
+      return node.isPrefix ? Precedence.Prefix : Precedence.Postfix;
+    case "AwaitExpression":
+    case "UnaryExpression":
+      return Precedence.Prefix;
+    default:
+      throw new Error("unreachable: " + node.type);
+  }
+}
+
 class Token {
   constructor() {}
 
@@ -30,6 +159,12 @@ class Identifier extends RawToken {}
 class None extends RawToken {
   constructor() {
     super("None");
+  }
+}
+
+class Space extends RawToken {
+  constructor() {
+    super(" ");
   }
 }
 
@@ -199,8 +334,31 @@ class PyCodeGen {
     return new TODO(node, "reduceAwaitExpression");
   }
 
-  reduceBinaryExpression(node, elements) {
-    return new TODO(node, "reduceBinaryExpression");
+  reduceBinaryExpression(node, { left, right }) {
+    let leftCode = left;
+    let isRightAssociative = node.operator === "**";
+    if (
+      getPrecedence(node.left) < getPrecedence(node) ||
+      (isRightAssociative &&
+        (getPrecedence(node.left) === getPrecedence(node) ||
+          node.left.type === "UnaryExpression"))
+    ) {
+      leftCode = new RawTuple(leftCode);
+    }
+    let rightCode = right;
+    if (
+      getPrecedence(node.right) < getPrecedence(node) ||
+      (!isRightAssociative && getPrecedence(node.right) === getPrecedence(node))
+    ) {
+      rightCode = new RawTuple(rightCode);
+    }
+    return new Sequence(
+      leftCode,
+      new Space(),
+      new RawToken(node.operator),
+      new Space(),
+      rightCode
+    );
   }
 
   reduceBindingIdentifier(node) {
@@ -564,7 +722,13 @@ class PyCodeGen {
     if (init === null) {
       init = new None();
     }
-    return new Sequence(binding, new RawToken(" = "), init);
+    return new Sequence(
+      binding,
+      new Space(),
+      new RawToken("="),
+      new Space(),
+      init
+    );
   }
 
   reduceWhileStatement(node, elements) {
