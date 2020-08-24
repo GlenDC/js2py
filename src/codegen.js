@@ -447,8 +447,8 @@ const pyInf = new CallExpression(
 const pyNone = new Identifier("None");
 
 class PyCodeGen {
-  constructor({ ignoreConsoleCalls } = {}) {
-    this.ignoreConsoleCalls = ignoreConsoleCalls ? true : false;
+  constructor(opts) {
+    this.ignoreConsoleCalls = true;  // hardcoded for now, would require polyfill if desired
     this.importedModules = new Set();
     this.polyfillExpressions = new Set();
   }
