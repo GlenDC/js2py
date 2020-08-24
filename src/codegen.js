@@ -194,8 +194,15 @@ class RawToken extends Token {
     this.str = str;
   }
 
-  emit(ts) {
-    ts.put(this.str);
+  emit(ts, { escape } = {}) {
+    let out = this.str;
+    if (escape) {
+      escape.forEach(pair => {
+        const [oldStr, newStr] = pair;
+        out = out.replace(oldStr, newStr);
+      })
+    }
+    ts.put(out);
   }
 }
 
@@ -298,7 +305,12 @@ class TemplateExpression extends Token {
     ts.put(`"`);
     this.children.forEach((child) => {
       if (child instanceof RawToken) {
-        child.emit(ts);
+        child.emit(ts, {
+          escape: [
+            [/\{/g, '{{'],
+            [/\}/g, '}}'],
+          ],
+        });
       } else {
         ts.put("{");
         child.emit(ts);
