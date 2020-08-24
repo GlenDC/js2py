@@ -243,6 +243,45 @@ class LiteralString extends Token {
   }
 }
 
+class LiteralRegexp extends Token {
+  constructor(
+    pattern,
+    { dotAll, global, ignoreCase, multiLine, sticky, unicode } = {}
+  ) {
+    super();
+    this.pattern = pattern;
+
+    this.dotAll = !!dotAll;
+    this.ignoreCase = !!ignoreCase;
+    this.multiLine = !!multiLine;
+
+    // ignored, but should probably be used somehow in to define what function to use...
+    this.global = !!global;
+
+    // ignored
+    this.sticky = !!sticky;
+    this.unicode = !!unicode;
+  }
+
+  emit(ts) {
+    ts.put('re.compile(r"');
+    ts.put(this.pattern.replace(/"/g, '\\"'));
+    ts.put('"');
+    const opts = [];
+    if (this.dotAll) {
+      opts.push("re.DOTALL");
+    }
+    if (this.ignoreCase) {
+      opts.push("re.IGNORECASE");
+    }
+    if (this.multiLine) {
+      opts.push("re.MULTILINE");
+    }
+    opts.forEach((opt) => ts.put(`, ${opt}`));
+    ts.put(")");
+  }
+}
+
 class RawTuple extends Token {
   constructor(...expressions) {
     super();
@@ -813,10 +852,12 @@ class PyCodeGen {
     return new LiteralNumeric(node.value);
   }
 
-  reduceLiteralRegExpExpression(node, elements) {
-    // TOOD: for this we need to support import statements, as we'll need to `import re`...
-    // we'll also need to support support method calls, to do whatever need to be able to do
-    return new TODO(node, "reduceLiteralRegExpExpression");
+  reduceLiteralRegExpExpression(node) {
+    this.importedModules.add("re"); // mark our now dependency on the std re pkg
+    return new LiteralRegexp(
+      node.pattern,
+      node // used for opts
+    );
   }
 
   reduceLiteralStringExpression(node) {
@@ -887,7 +928,7 @@ class PyCodeGen {
       importStatements.push(new Line(new ImportStatement(importedModule)));
     });
     if (importStatements.length > 0) {
-      importStatements.push(new Line()); // as to make it a bit more Pythonic
+      importStatements.push(new Line(), new Line()); // as to make it a bit more Pythonic
     }
 
     return new Block(
