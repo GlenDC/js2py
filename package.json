@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/GlenDC/js2py#readme",
   "dependencies": {
+    "shift-codegen": "^7.0.3",
     "shift-parser": "^7.0.3"
   },
   "devDependencies": {
