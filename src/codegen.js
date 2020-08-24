@@ -166,12 +166,6 @@ class None extends RawToken {
   }
 }
 
-class Space extends RawToken {
-  constructor() {
-    super(" ");
-  }
-}
-
 class LiteralBoolean extends RawToken {
   constructor(value) {
     super(value ? "True" : "False");
@@ -269,6 +263,27 @@ class TemplateExpression extends Token {
   }
 }
 
+class InfixOperation extends Token {
+    constructor(operator, left, right) {
+        super();
+        this.operator = operator;
+        this.left = left;
+        this.right = right;
+    }
+
+    emit(ts) {
+        this.left.emit(ts);
+        ts.put(` ${this.operator} `);
+        this.right.emit(ts);
+    }
+}
+
+class Assignment extends InfixOperation {
+    constructor(left, right) {
+        super('=', left, right);
+    }
+}
+
 class TODO extends Token {
   constructor(element, reduceFunc) {
     super();
@@ -357,13 +372,7 @@ class PyCodeGen {
     ) {
       rightCode = new RawTuple(rightCode);
     }
-    return new Sequence(
-      leftCode,
-      new Space(),
-      new RawToken(node.operator),
-      new Space(),
-      rightCode
-    );
+    return new InfixOperation(node.operator, leftCode, rightCode);
   }
 
   reduceBindingIdentifier(node) {
@@ -594,7 +603,7 @@ class PyCodeGen {
     return new TODO(node, "reduceLiteralRegExpExpression");
   }
 
-  reduceMethod(node, elements) {
+  reduceMethod(node, elements) { 
     return new TODO(node, "reduceMethod");
   }
 
@@ -736,13 +745,7 @@ class PyCodeGen {
     if (init === null) {
       init = new None();
     }
-    return new Sequence(
-      binding,
-      new Space(),
-      new RawToken("="),
-      new Space(),
-      init
-    );
+    return new Assignment(binding, init);
   }
 
   reduceWhileStatement(node, elements) {
