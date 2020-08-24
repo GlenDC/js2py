@@ -264,24 +264,24 @@ class TemplateExpression extends Token {
 }
 
 class InfixOperation extends Token {
-    constructor(operator, left, right) {
-        super();
-        this.operator = operator;
-        this.left = left;
-        this.right = right;
-    }
+  constructor(operator, left, right) {
+    super();
+    this.operator = operator;
+    this.left = left;
+    this.right = right;
+  }
 
-    emit(ts) {
-        this.left.emit(ts);
-        ts.put(` ${this.operator} `);
-        this.right.emit(ts);
-    }
+  emit(ts) {
+    this.left.emit(ts);
+    ts.put(` ${this.operator} `);
+    this.right.emit(ts);
+  }
 }
 
 class Assignment extends InfixOperation {
-    constructor(left, right) {
-        super('=', left, right);
-    }
+  constructor(left, right) {
+    super("=", left, right);
+  }
 }
 
 class TODO extends Token {
@@ -330,12 +330,12 @@ class PyCodeGen {
     return new TODO(node, "reduceArrowExpression");
   }
 
-  reduceAssignmentExpression(node, elements) {
-    return new TODO(node, "reduceAssignmentExpression");
+  reduceAssignmentExpression(node, { binding, expression }) {
+    return new Assignment(binding, expression);
   }
 
-  reduceAssignmentTargetIdentifier(node, elements) {
-    return new TODO(node, "reduceAssignmentTargetIdentifier");
+  reduceAssignmentTargetIdentifier(node) {
+    return new Identifier(node.name);
   }
 
   reduceAssignmentTargetPropertyIdentifier(node, elements) {
@@ -406,8 +406,8 @@ class PyCodeGen {
   reduceCallExpression(node, { callee, arguments: args }) {
     // TODO: support ignore console calls better,
     // as aliasing and other indirect uses of console will still fail...
-    if (this.ignoreConsoleCalls && callee.children[0].str === 'console') {
-        return new Empty();
+    if (this.ignoreConsoleCalls && callee.children[0].str === "console") {
+      return new Empty();
     }
     return new Sequence(callee, new RawTuple(...args));
   }
@@ -603,7 +603,7 @@ class PyCodeGen {
     return new TODO(node, "reduceLiteralRegExpExpression");
   }
 
-  reduceMethod(node, elements) { 
+  reduceMethod(node, elements) {
     return new TODO(node, "reduceMethod");
   }
 
