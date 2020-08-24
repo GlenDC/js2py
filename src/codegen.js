@@ -502,6 +502,7 @@ const pyInf = new CallExpression(
   new LiteralString("+Inf")
 );
 const pyNone = new Identifier("None");
+const pyEmpty = new RawToken("");
 
 class PyCodeGen {
   constructor({ topLevelComment } = {}) {
@@ -731,7 +732,7 @@ class PyCodeGen {
   }
 
   reduceEmptyStatement(node, elements) {
-    return new TODO(node, "reduceEmptyStatement");
+    return pyEmpty;
   }
 
   reduceExport(node, elements) {
