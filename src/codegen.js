@@ -301,6 +301,8 @@ class TODO extends Token {
 class PyCodeGen {
   constructor({ ignoreConsoleCalls } = {}) {
     this.ignoreConsoleCalls = ignoreConsoleCalls ? true : false;
+    this.imported_modules = new Set();
+    this.polyfill_expressions = new Set();
   }
 
   parenToAvoidBeingDirective(element, original) {
@@ -428,8 +430,12 @@ class PyCodeGen {
     return new TODO(node, "reduceClassExpression");
   }
 
-  reduceCompoundAssignmentExpression(node, elements) {
-    return new TODO(node, "reduceCompoundAssignmentExpression");
+  reduceCompoundAssignmentExpression(node, { binding, expression }) {
+    // to keep things simple, use a regular assignment + infix operation
+    return new Assignment(
+        binding,
+        new InfixOperation(node.operator.slice(0, -1), binding, expression),
+    );
   }
 
   reduceComputedMemberAssignmentTarget(node, elements) {
@@ -725,8 +731,19 @@ class PyCodeGen {
     return new TODO(node, "reduceUnaryExpression");
   }
 
-  reduceUpdateExpression(node, elements) {
-    return new TODO(node, "reduceUpdateExpression");
+  reduceUpdateExpression(node, { operand }) {
+    if (!node.isPrefix) {
+      throw 'TODO: postfix update expressions are not yet supported'
+    }
+    switch (node.operator) {
+      case '++':
+        return new Assignment(operand, new InfixOperation('+', operand, new LiteralNumeric(1)));
+      case '--':
+        return new Assignment(operand, new InfixOperation('-', operand, new LiteralNumeric(1)));
+      default:
+        throw `invalid update expression operator '${node.operator}'`;
+    }
+    // TODO: still not exactly correct as we should also be able to use the value immediately
   }
 
   reduceVariableDeclaration(node, { declarators }) {
