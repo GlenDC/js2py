@@ -188,14 +188,6 @@ class Token {
   }
 }
 
-class Empty extends Token {
-  constructor() {
-    super();
-  }
-
-  emit() {}
-}
-
 class RawToken extends Token {
   constructor(str) {
     super();
@@ -397,6 +389,29 @@ class Comment extends Token {
   }
 }
 
+class ImportStatement extends Token {
+  constructor(moduleName, { alias, children } = {}) {
+    super();
+    this.moduleName = moduleName;
+    if (children && alias) {
+      throw 'cannot use alias when using children';
+    }
+    this.children = children;
+    this.alias = alias;
+  }
+
+  emit(ts) {
+    if (this.children) {
+      ts.put(`from ${this.moduleName} import ${this.children.join(", ")}`);
+      return;
+    }
+    ts.put(`import ${this.moduleName}`);
+    if (this.alias) {
+      ts.put(` as ${this.alias}`);
+    }
+  }
+}
+
 class TODO extends Token {
   constructor(element, reduceFunc) {
     super();
@@ -423,8 +438,8 @@ const pyInf = new CallExpression(
 class PyCodeGen {
   constructor({ ignoreConsoleCalls } = {}) {
     this.ignoreConsoleCalls = ignoreConsoleCalls ? true : false;
-    this.imported_modules = new Set();
-    this.polyfill_expressions = new Set();
+    this.importedModules = new Set();
+    this.polyfillExpressions = new Set();
   }
 
   // parenToAvoidBeingDirective(element, original) {
@@ -809,7 +824,14 @@ class PyCodeGen {
     //     statements[0]
     //   );
     // }
-    return new Block(...directives, ...statements);
+    let importStatements = [];
+    this.importedModules.forEach(importedModule => {
+      importStatements.push(new Line(new ImportStatement(importedModule)));
+    });
+    if (importStatements.length > 0) {
+      importStatements.push(new Line());  // as to make it a bit more Pythonic
+    }
+    return new Block(...importStatements, ...directives, ...statements);
   }
 
   reduceSetter(node, elements) {
