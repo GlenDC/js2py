@@ -1,5 +1,22 @@
 const { TokenStream } = require("./token-stream");
 
+// some polyfill stuff
+if (!Array.prototype.flat) {
+  Object.defineProperty(Array.prototype, "flat", {
+    value: function (depth = 1, stack = []) {
+      for (let item of this) {
+        if (item instanceof Array && depth > 0) {
+          item.flat(depth - 1, stack);
+        } else {
+          stack.push(item);
+        }
+      }
+
+      return stack;
+    },
+  });
+}
+
 // TODO: check with Python docs
 const Precedence = {
   Sequence: 0,
@@ -230,7 +247,7 @@ class LiteralString extends Token {
 class RawTuple extends Token {
   constructor(...expressions) {
     super();
-    this.expressions = expressions || [];
+    this.expressions = (expressions || []).flat();
   }
 
   emit(ts) {
@@ -249,7 +266,7 @@ class RawTuple extends Token {
 class Line extends Token {
   constructor(...statements) {
     super();
-    this.statements = statements || [];
+    this.statements = (statements || []).flat();
   }
 
   emit(ts) {
@@ -264,7 +281,7 @@ class Block extends Token {
   // - indention
   constructor(...lines) {
     super();
-    this.lines = lines || [];
+    this.lines = (lines || []).flat();
   }
 
   emit(ts) {
@@ -279,7 +296,7 @@ class Block extends Token {
 class TemplateExpression extends Token {
   constructor(...children) {
     super();
-    this.children = children || [];
+    this.children = (children || []).flat();
   }
 
   emit(ts) {
@@ -355,7 +372,10 @@ class InfixOperation extends Token {
 
   emit(ts) {
     this.left.emit(ts);
-    ts.put(` ${this.operator} `);
+    if (this.operator !== ",") {
+      ts.put(" ");
+    }
+    ts.put(`${this.operator} `);
     this.right.emit(ts);
   }
 }
@@ -470,25 +490,29 @@ class PyCodeGen {
         // TODO: will need more complicated logic eventually,
         // to also take into account anything that would evaluate to...
         if (
-          (leftCode instanceof LiteralString || leftCode instanceof TemplateExpression) &&
+          (leftCode instanceof LiteralString ||
+            leftCode instanceof TemplateExpression) &&
           rightCode instanceof LiteralNumeric
         ) {
           rightCode = new CallExpression(new Identifier("str"), rightCode);
         } else if (
           leftCode instanceof LiteralNumeric &&
-          (rightCode instanceof LiteralString || rightCode instanceof TemplateExpression)
+          (rightCode instanceof LiteralString ||
+            rightCode instanceof TemplateExpression)
         ) {
           leftCode = new CallExpression(new Identifier("str"), leftCode);
         }
       case "-":
         if (
-          (leftCode instanceof LiteralString || leftCode instanceof TemplateExpression) &&
+          (leftCode instanceof LiteralString ||
+            leftCode instanceof TemplateExpression) &&
           rightCode instanceof LiteralNumeric
         ) {
           return pyNaN;
         } else if (
           leftCode instanceof LiteralNumeric &&
-          (rightCode instanceof LiteralString || rightCode instanceof TemplateExpression)
+          (rightCode instanceof LiteralString ||
+            rightCode instanceof TemplateExpression)
         ) {
           return pyNaN;
         }
@@ -691,10 +715,10 @@ class PyCodeGen {
     if (node.name === "undefined") {
       return new None();
     }
-    if (node.name === 'Infinity') {
+    if (node.name === "Infinity") {
       return pyInf;
     }
-    if (node.name === 'NaN') {
+    if (node.name === "NaN") {
       return pyNaN;
     }
     return new Identifier(node.name);
@@ -904,7 +928,41 @@ class PyCodeGen {
     if (init === null) {
       init = new None();
     }
-    return new Assignment(binding, init);
+    // ---------------
+    // as to emulate JS's behaviour of this silly comma-abuse, poor little comma
+    function flatten(element) {
+        let elements = [];
+        let startElement = element;
+        while (startElement instanceof RawTuple && startElement.expressions.length === 1) {
+          startElement = startElement.expressions[0];
+        }
+        if (startElement instanceof InfixOperation && startElement.operator === ',') {
+          // handle left element(s)
+          let innerElement = startElement.left;
+          while (innerElement instanceof InfixOperation && innerElement.operator == ",") {
+            const [recElements, recElement] = flatten(innerElement.right);
+            elements.unshift(new Line(recElement));
+            if (recElements.length > 0) {
+              elements.unshift(recElements);
+            }
+            innerElement = innerElement.left;
+          }
+          elements.unshift(new Line(innerElement));
+          // handle right element(s)
+          let [rightElements, rightElement] = flatten(startElement.right);
+          while (rightElements.length > 0) {
+            elements.push(rightElements);
+            [rightElements, rightElement] = flatten(rightElement);
+          }
+          element = rightElement;
+        }
+        return [elements, element];
+    }
+    let [elements, initToBind] = flatten(init);
+    elements = elements.flat(Infinity);
+    // ------------
+    elements.push(new Assignment(binding, initToBind));
+    return elements;
   }
 
   reduceWhileStatement(node, elements) {
