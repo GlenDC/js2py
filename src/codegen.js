@@ -55,6 +55,24 @@ const BinaryPrecedence = {
   "**": Precedence.Exponential,
 };
 
+function toPythonOp(operator) {
+  switch (operator) {
+    case '&&': return 'and';
+    case '||': return 'or';
+    case '===': return 'is';
+    case '!==': return 'is not';
+    case '>>>': return '>>';  // unsigned right bit shifts are meaningless in Python
+    default: return operator;
+  }
+}
+
+function toPythonPrefixOp(operator) {
+  switch (operator) {
+    case '!': return 'not';
+    default: return operator;
+  }
+}
+
 function getPrecedence(node) {
   switch (node.type) {
     case "ArrayExpression":
@@ -304,10 +322,28 @@ class PropertyGetterExpression extends Token {
   }
 }
 
+class PrefixOperation extends Token {
+  constructor(operator, expression) {
+    super();
+    this.operator = toPythonPrefixOp(operator);
+    this.expression = expression;
+  }
+
+  emit(ts) {
+    ts.put(this.operator);
+    // parentheses aren't always required,
+    // but they are always accepted in Python,
+    // so better safe than sorry
+    ts.put('(');
+    this.expression.emit(ts);
+    ts.put(')');
+  }
+}
+
 class InfixOperation extends Token {
   constructor(operator, left, right) {
     super();
-    this.operator = operator;
+    this.operator = toPythonOp(operator);
     this.left = left;
     this.right = right;
   }
@@ -774,8 +810,8 @@ class PyCodeGen {
     return new TODO(node, "reduceTryFinallyStatement");
   }
 
-  reduceUnaryExpression(node, elements) {
-    return new TODO(node, "reduceUnaryExpression");
+  reduceUnaryExpression(node, { operand }) {
+    return new PrefixOperation(node.operator, operand);
   }
 
   reduceUpdateExpression(node, { operand }) {
