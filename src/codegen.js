@@ -292,17 +292,17 @@ class TemplateExpression extends Token {
   }
 
   emit(ts) {
-    if (this.children.some((child) => child instanceof Identifier)) {
+    if (this.children.some((child) => !(child instanceof RawToken))) {
       ts.put("f");
     }
     ts.put(`"`);
     this.children.forEach((child) => {
-      if (child instanceof Identifier) {
+      if (child instanceof RawToken) {
+        child.emit(ts);
+      } else {
         ts.put("{");
         child.emit(ts);
         ts.put("}");
-      } else {
-        child.emit(ts);
       }
     });
     ts.put(`"`);
