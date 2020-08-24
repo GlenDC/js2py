@@ -208,12 +208,6 @@ class RawToken extends Token {
 
 class Identifier extends RawToken {}
 
-class None extends RawToken {
-  constructor() {
-    super("None");
-  }
-}
-
 class LiteralBoolean extends RawToken {
   constructor(value) {
     super(value ? "True" : "False");
@@ -232,13 +226,17 @@ class LiteralNumeric extends Token {
 }
 
 class LiteralString extends Token {
-  constructor(str, delim) {
+  constructor(str, delim, isRaw) {
     super();
     this.str = str;
     this.delim = delim || `'`;
+    this.isRaw = !!isRaw;
   }
 
   emit(ts) {
+    if (this.isRaw) {
+      ts.put('r');
+    }
     ts.put(`${this.delim}${this.str}${this.delim}`);
   }
 }
@@ -446,6 +444,7 @@ const pyInf = new CallExpression(
   new Identifier("float"),
   new LiteralString("+Inf")
 );
+const pyNone = new Identifier("None");
 
 class PyCodeGen {
   constructor({ ignoreConsoleCalls } = {}) {
@@ -658,7 +657,7 @@ class PyCodeGen {
 
   reduceDirective(node) {
     const delim = node.rawValue.match(/(^|[^\\])(\\\\)*"/) ? "'" : '"';
-    return new LiteralString(node.rawValue, delim); // TODO: does this need a Line?
+    return new LiteralString(node.rawValue, delim);
   }
 
   reduceDoWhileStatement(node, elements) {
@@ -740,7 +739,7 @@ class PyCodeGen {
   reduceIdentifierExpression(node, elements) {
     // TODO: what if name is `let, const, ...`???
     if (node.name === "undefined") {
-      return new None();
+      return pyNone;
     }
     if (node.name === "Infinity") {
       return pyInf;
@@ -780,7 +779,7 @@ class PyCodeGen {
   }
 
   reduceLiteralNullExpression() {
-    return new None();
+    return pyNone;
   }
 
   reduceLiteralNumericExpression(node) {
@@ -793,8 +792,8 @@ class PyCodeGen {
     return new TODO(node, "reduceLiteralRegExpExpression");
   }
 
-  reduceLiteralStringExpression(node, elements) {
-    return new TODO(node, "reduceLiteralRegExpExpression");
+  reduceLiteralStringExpression(node) {
+    return new LiteralString(node.rawValue, delim, true);
   }
 
   reduceMethod(node, elements) {
@@ -961,7 +960,7 @@ class PyCodeGen {
 
   reduceVariableDeclarator(node, { binding, init }) {
     if (init === null) {
-      init = new None();
+      init = pyNone;
     }
     // ---------------
     // as to emulate JS's behaviour of this silly comma-abuse, poor little comma
