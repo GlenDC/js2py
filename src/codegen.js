@@ -569,7 +569,7 @@ class PyCodeGen {
     // TODO: support ignore console calls better,
     // as aliasing and other indirect uses of console will still fail...
     const callExpression = new CallExpression(callee, args);
-    if (this.ignoreConsoleCalls && callee.obj.str === "console") {
+    if (this.ignoreConsoleCalls && (callee.str == "console" || (callee.obj && callee.obj.str === "console"))) {
       const ts = new TokenStream();
       callExpression.emit(ts);
       return new Comment(`code removed by js2py: ${ts.result}`);
@@ -820,8 +820,9 @@ class PyCodeGen {
     return new TODO(node, "reduceShorthandProperty");
   }
 
-  reduceSpreadElement(node, elements) {
-    return new TODO(node, "reduceSpreadElement");
+  reduceSpreadElement(node, { expression }) {
+    // easy solution for now, we can make this more complicated if needed
+    return new PrefixOperation('*', expression);
   }
 
   reduceSpreadProperty(node, elements) {
