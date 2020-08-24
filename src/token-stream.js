@@ -13,7 +13,7 @@ class TokenStream {
   }
 
   putEOL() {
-    this.put('\n');
+    this.put("\n");
   }
 }
 

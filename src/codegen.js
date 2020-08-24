@@ -57,19 +57,27 @@ const BinaryPrecedence = {
 
 function toPythonOp(operator) {
   switch (operator) {
-    case '&&': return 'and';
-    case '||': return 'or';
-    case '===': return 'is';
-    case '!==': return 'is not';
-    case '>>>': return '>>';  // unsigned right bit shifts are meaningless in Python
-    default: return operator;
+    case "&&":
+      return "and";
+    case "||":
+      return "or";
+    case "===":
+      return "is";
+    case "!==":
+      return "is not";
+    case ">>>":
+      return ">>"; // unsigned right bit shifts are meaningless in Python
+    default:
+      return operator;
   }
 }
 
 function toPythonPrefixOp(operator) {
   switch (operator) {
-    case '!': return 'not';
-    default: return operator;
+    case "!":
+      return "not";
+    default:
+      return operator;
   }
 }
 
@@ -151,6 +159,10 @@ function rawTupleIfNeeded(node, precedence, a) {
   return getPrecedence(node) < precedence ? new RawTuple(a) : a;
 }
 
+// TODO: find a good way to check if an expression evaluates to an expected:
+// - type of token
+// - type of token with a specific property set
+
 class Token {
   constructor() {}
 
@@ -207,21 +219,11 @@ class LiteralString extends Token {
   constructor(str, delim) {
     super();
     this.str = str;
-    this.delim = delim;
+    this.delim = delim || `'`;
   }
 
   emit(ts) {
     ts.put(`${this.delim}${this.str}${this.delim}`);
-  }
-}
-
-class EOL extends Token {
-  constructor() {
-    super();
-  }
-
-  emit(ts) {
-    ts.put("\n");
   }
 }
 
@@ -251,12 +253,15 @@ class Line extends Token {
   }
 
   emit(ts) {
-    this.statements.forEach(x => x.emit(ts));
+    this.statements.forEach((x) => x.emit(ts));
     ts.putEOL();
   }
 }
 
 class Block extends Token {
+  // TODO:
+  // - scoping
+  // - indention
   constructor(...lines) {
     super();
     this.lines = lines || [];
@@ -272,7 +277,7 @@ class Block extends Token {
 }
 
 class TemplateExpression extends Token {
-  constructor(children) {
+  constructor(...children) {
     super();
     this.children = children || [];
   }
@@ -296,7 +301,7 @@ class TemplateExpression extends Token {
 }
 
 class CallExpression extends Token {
-  constructor(callee, args) {
+  constructor(callee, ...args) {
     super();
     this.callee = callee;
     this.arguments = new RawTuple(...args);
@@ -317,7 +322,7 @@ class PropertyGetterExpression extends Token {
 
   emit(ts) {
     this.obj.emit(ts);
-    ts.put('.');
+    ts.put(".");
     this.id.emit(ts);
   }
 }
@@ -334,9 +339,9 @@ class PrefixOperation extends Token {
     // parentheses aren't always required,
     // but they are always accepted in Python,
     // so better safe than sorry
-    ts.put('(');
+    ts.put("(");
     this.expression.emit(ts);
-    ts.put(')');
+    ts.put(")");
   }
 }
 
@@ -385,6 +390,15 @@ class TODO extends Token {
     );
   }
 }
+
+const pyNaN = new CallExpression(
+  new Identifier("float"),
+  new LiteralString("nan")
+);
+const pyInf = new CallExpression(
+  new Identifier("float"),
+  new LiteralString("+Inf")
+);
 
 class PyCodeGen {
   constructor({ ignoreConsoleCalls } = {}) {
@@ -446,6 +460,40 @@ class PyCodeGen {
 
   reduceBinaryExpression(node, { left, right }) {
     let leftCode = left;
+    let rightCode = right;
+
+    // some corrections based on the operator,
+    // I have a feeling we might need to refactor this out eventually,
+    // as it could become very hairy and long
+    switch (node.operator) {
+      case "+":
+        // TODO: will need more complicated logic eventually,
+        // to also take into account anything that would evaluate to...
+        if (
+          (leftCode instanceof LiteralString || leftCode instanceof TemplateExpression) &&
+          rightCode instanceof LiteralNumeric
+        ) {
+          rightCode = new CallExpression(new Identifier("str"), rightCode);
+        } else if (
+          leftCode instanceof LiteralNumeric &&
+          (rightCode instanceof LiteralString || rightCode instanceof TemplateExpression)
+        ) {
+          leftCode = new CallExpression(new Identifier("str"), leftCode);
+        }
+      case "-":
+        if (
+          (leftCode instanceof LiteralString || leftCode instanceof TemplateExpression) &&
+          rightCode instanceof LiteralNumeric
+        ) {
+          return pyNaN;
+        } else if (
+          leftCode instanceof LiteralNumeric &&
+          (rightCode instanceof LiteralString || rightCode instanceof TemplateExpression)
+        ) {
+          return pyNaN;
+        }
+    }
+
     let isRightAssociative = node.operator === "**";
     if (
       getPrecedence(node.left) < getPrecedence(node) ||
@@ -455,13 +503,13 @@ class PyCodeGen {
     ) {
       leftCode = new RawTuple(leftCode);
     }
-    let rightCode = right;
     if (
       getPrecedence(node.right) < getPrecedence(node) ||
       (!isRightAssociative && getPrecedence(node.right) === getPrecedence(node))
     ) {
       rightCode = new RawTuple(rightCode);
     }
+
     return new InfixOperation(node.operator, leftCode, rightCode);
   }
 
@@ -481,12 +529,12 @@ class PyCodeGen {
     return new TODO(node, "reduceBindingWithDefault");
   }
 
-  reduceBlock(node, elements) {
-    return new TODO(node, "reduceBlock");
+  reduceBlock(node, { statements }) {
+    return new Block(...statements);
   }
 
-  reduceBlockStatement(node, elements) {
-    return new TODO(node, "reduceBlockStatement");
+  reduceBlockStatement(node, { block }) {
+    return block;
   }
 
   reduceBreakStatement(node, elements) {
@@ -524,8 +572,8 @@ class PyCodeGen {
   reduceCompoundAssignmentExpression(node, { binding, expression }) {
     // to keep things simple, use a regular assignment + infix operation
     return new Assignment(
-        binding,
-        new InfixOperation(node.operator.slice(0, -1), binding, expression),
+      binding,
+      new InfixOperation(node.operator.slice(0, -1), binding, expression)
     );
   }
 
@@ -643,6 +691,12 @@ class PyCodeGen {
     if (node.name === "undefined") {
       return new None();
     }
+    if (node.name === 'Infinity') {
+      return pyInf;
+    }
+    if (node.name === 'NaN') {
+      return pyNaN;
+    }
     return new Identifier(node.name);
   }
 
@@ -670,9 +724,8 @@ class PyCodeGen {
     return new LiteralBoolean(node.value);
   }
 
-  reduceLiteralInfinityExpression(node, elements) {
-    // TODO: do as float('inf'), for that we'll need to support function calls :)
-    return new TODO(node, "reduceLiteralInfinityExpression");
+  reduceLiteralInfinityExpression() {
+    return pyInf;
   }
 
   reduceLiteralNullExpression() {
@@ -758,7 +811,7 @@ class PyCodeGen {
   reduceStaticMemberExpression(node, { object }) {
     return new PropertyGetterExpression(
       rawTupleIfNeeded(node.object, getPrecedence(node), object),
-      new Identifier(node.property),
+      new Identifier(node.property)
     );
   }
 
@@ -791,7 +844,7 @@ class PyCodeGen {
   }
 
   reduceTemplateExpression(node, { tag, elements }) {
-    return new TemplateExpression(elements);
+    return new TemplateExpression(...elements);
   }
 
   reduceThisExpression(node, elements) {
@@ -816,13 +869,19 @@ class PyCodeGen {
 
   reduceUpdateExpression(node, { operand }) {
     if (!node.isPrefix) {
-      throw 'TODO: postfix update expressions are not yet supported'
+      throw "TODO: postfix update expressions are not yet supported";
     }
     switch (node.operator) {
-      case '++':
-        return new Assignment(operand, new InfixOperation('+', operand, new LiteralNumeric(1)));
-      case '--':
-        return new Assignment(operand, new InfixOperation('-', operand, new LiteralNumeric(1)));
+      case "++":
+        return new Assignment(
+          operand,
+          new InfixOperation("+", operand, new LiteralNumeric(1))
+        );
+      case "--":
+        return new Assignment(
+          operand,
+          new InfixOperation("-", operand, new LiteralNumeric(1))
+        );
       default:
         throw `invalid update expression operator '${node.operator}'`;
     }
