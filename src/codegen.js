@@ -1,3 +1,5 @@
+const { TokenStream } = require("./token-stream");
+
 // TODO: check with Python docs
 const Precedence = {
   Sequence: 0,
@@ -224,18 +226,30 @@ class RawTuple extends Token {
   }
 }
 
-class Sequence extends Token {
-  constructor(...children) {
+class Line extends Token {
+  constructor(...statements) {
     super();
-    this.children = children || [];
+    this.statements = statements || [];
   }
 
-  emit(ts, noIn) {
-    this.forEach((x) => x.emit(ts, noIn));
+  emit(ts) {
+    this.statements.forEach(x => x.emit(ts));
+    ts.putEOL();
+  }
+}
+
+class Block extends Token {
+  constructor(...lines) {
+    super();
+    this.lines = lines || [];
+  }
+
+  emit(ts) {
+    this.forEach((x) => x.emit(ts));
   }
 
   forEach(f) {
-    this.children.forEach((x) => x.forEach(f));
+    this.lines.forEach((x) => x.forEach(f));
   }
 }
 
@@ -263,6 +277,33 @@ class TemplateExpression extends Token {
   }
 }
 
+class CallExpression extends Token {
+  constructor(callee, args) {
+    super();
+    this.callee = callee;
+    this.arguments = new RawTuple(...args);
+  }
+
+  emit(ts) {
+    this.callee.emit(ts);
+    this.arguments.emit(ts);
+  }
+}
+
+class PropertyGetterExpression extends Token {
+  constructor(obj, id) {
+    super();
+    this.obj = obj;
+    this.id = id;
+  }
+
+  emit(ts) {
+    this.obj.emit(ts);
+    ts.put('.');
+    this.id.emit(ts);
+  }
+}
+
 class InfixOperation extends Token {
   constructor(operator, left, right) {
     super();
@@ -281,6 +322,17 @@ class InfixOperation extends Token {
 class Assignment extends InfixOperation {
   constructor(left, right) {
     super("=", left, right);
+  }
+}
+
+class Comment extends Token {
+  constructor(str) {
+    super();
+    this.str = str;
+  }
+
+  emit(ts) {
+    ts.put(`# ${this.str}`);
   }
 }
 
@@ -305,16 +357,16 @@ class PyCodeGen {
     this.polyfill_expressions = new Set();
   }
 
-  parenToAvoidBeingDirective(element, original) {
-    if (
-      element &&
-      element.type === "ExpressionStatement" &&
-      element.expression.type === "LiteralStringExpression"
-    ) {
-      return new Sequence(new RawTuple(original.children[0]), new EOL());
-    }
-    return original;
-  }
+  // parenToAvoidBeingDirective(element, original) {
+  //   if (
+  //     element &&
+  //     element.type === "ExpressionStatement" &&
+  //     element.expression.type === "LiteralStringExpression"
+  //   ) {
+  //     return new Line(new RawTuple(original.children[0]));
+  //   }
+  //   return original;
+  // }
 
   reduceArrayAssignmentTarget(node, elements) {
     return new TODO(node, "reduceArrayAssignmentTarget");
@@ -408,10 +460,13 @@ class PyCodeGen {
   reduceCallExpression(node, { callee, arguments: args }) {
     // TODO: support ignore console calls better,
     // as aliasing and other indirect uses of console will still fail...
-    if (this.ignoreConsoleCalls && callee.children[0].str === "console") {
-      return new Empty();
+    const callExpression = new CallExpression(callee, args);
+    if (this.ignoreConsoleCalls && callee.obj.str === "console") {
+      const ts = new TokenStream();
+      callExpression.emit(ts);
+      return new Comment(`code removed by js2py: ${ts.result}`);
     }
-    return new Sequence(callee, new RawTuple(...args));
+    return callExpression;
   }
 
   reduceCatchClause(node, elements) {
@@ -468,7 +523,7 @@ class PyCodeGen {
 
   reduceDirective(node) {
     const delim = node.rawValue.match(/(^|[^\\])(\\\\)*"/) ? "'" : '"';
-    return new Sequence(new LiteralString(node.rawValue, delim), new EOL());
+    return new LiteralString(node.rawValue, delim); // TODO: does this need a Line?
   }
 
   reduceDoWhileStatement(node, elements) {
@@ -508,14 +563,7 @@ class PyCodeGen {
   }
 
   reduceExpressionStatement(node, { expression }) {
-    const needsParens =
-      expression.startsWithCurly ||
-      expression.startsWithLetSquareBracket ||
-      expression.startsWithFunctionOrClass;
-    return new Sequence(
-      needsParens ? new RawTuple(expression) : expression,
-      new EOL()
-    );
+    return new Line(expression);
   }
 
   reduceForAwaitStatement(node, elements) {
@@ -642,13 +690,13 @@ class PyCodeGen {
   }
 
   reduceScript(node, { directives, statements }) {
-    if (statements.length) {
-      statements[0] = this.parenToAvoidBeingDirective(
-        node.statements[0],
-        statements[0]
-      );
-    }
-    return new Sequence(...directives, ...statements);
+    // if (statements.length) {
+    //   statements[0] = this.parenToAvoidBeingDirective(
+    //     node.statements[0],
+    //     statements[0]
+    //   );
+    // }
+    return new Block(...directives, ...statements);
   }
 
   reduceSetter(node, elements) {
@@ -672,10 +720,9 @@ class PyCodeGen {
   }
 
   reduceStaticMemberExpression(node, { object }) {
-    return new Sequence(
+    return new PropertyGetterExpression(
       rawTupleIfNeeded(node.object, getPrecedence(node), object),
-      new RawToken("."),
-      new Identifier(node.property)
+      new Identifier(node.property),
     );
   }
 
@@ -749,9 +796,9 @@ class PyCodeGen {
   reduceVariableDeclaration(node, { declarators }) {
     const elements = [];
     declarators.forEach((declarator) => {
-      elements.push(declarator, new EOL());
+      elements.push(new Line(declarator));
     });
-    return new Sequence(elements);
+    return elements; // NOTE: need to be flattened somewhere in callee
   }
 
   reduceVariableDeclarationStatement(node, { declaration }) {

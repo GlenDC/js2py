@@ -11,6 +11,10 @@ class TokenStream {
     const tokenStr = renderNumber(number);
     this.put(tokenStr);
   }
+
+  putEOL() {
+    this.put('\n');
+  }
 }
 
 function renderNumber(n) {
