@@ -190,7 +190,7 @@ class Token {
   }
 }
 
-class RawToken extends Token {
+class StringToken extends Token {
   constructor(str) {
     super();
     this.str = str;
@@ -201,11 +201,13 @@ class RawToken extends Token {
   }
 }
 
-class Identifier extends RawToken {}
+class RawToken extends StringToken {}
 
-class Keyword extends RawToken {}
+class Identifier extends StringToken {}
 
-class LiteralBoolean extends RawToken {
+class Keyword extends StringToken {}
+
+class LiteralBoolean extends StringToken {
   constructor(value) {
     super(value ? "True" : "False");
   }
@@ -316,7 +318,7 @@ class Block extends Token {
   // - scoping
   constructor(...lines) {
     super();
-    this.lines = (lines || []).flat().filter(line => {
+    this.lines = (lines || []).flat().filter((line) => {
       return !(line instanceof Block && line.lines.length === 0);
     });
     this.isTopLevel = false;
@@ -343,19 +345,26 @@ class TemplateExpression extends Token {
   }
 
   emit(ts, opts) {
+    let delim = `"`;
+    if (
+      this.children.some(
+        (child) => child instanceof RawToken && /\r|\n/.exec(child.str)
+      )
+    ) {
+      delim = `"""`;
+    }
+    const childEscapePairs = [[/"/g, `\"`]];
     if (this.children.some((child) => !(child instanceof RawToken))) {
       ts.put("f", opts);
+      childEscapePairs.push([/\{/g, "{{"], [/\}/g, "}}"]);
     }
-    ts.put(`"`, opts);
+    ts.put(delim, opts);
     this.children.forEach((child) => {
       if (child instanceof RawToken) {
         child.emit(
           ts,
           {
-            escape: [
-              [/\{/g, "{{"],
-              [/\}/g, "}}"],
-            ],
+            escape: childEscapePairs,
           },
           opts
         );
@@ -365,7 +374,7 @@ class TemplateExpression extends Token {
         ts.put("}", opts);
       }
     });
-    ts.put(`"`, opts);
+    ts.put(delim, opts);
   }
 }
 
@@ -635,7 +644,9 @@ class TODO extends Token {
   }
 
   emit(ts, opts) {
-    ts.put(`raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")`);
+    ts.put(
+      `raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")`
+    );
   }
 }
 
@@ -1013,7 +1024,7 @@ class PyCodeGen {
     );
   }
 
-  reduceLiteralStringExpression(node) {
+  reduceLiteralStringExpression(node, elements) {
     return new LiteralString(node.rawValue, delim, true);
   }
 
