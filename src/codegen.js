@@ -5,7 +5,7 @@ const { version: projectVersion } = require("../package.json");
 // some polyfill stuff
 if (!Array.prototype.flat) {
   Object.defineProperty(Array.prototype, "flat", {
-    value: function (depth = 1, stack = []) {
+    value: function (depth = 8192, stack = []) {
       for (let item of this) {
         if (item instanceof Array && depth > 0) {
           item.flat(depth - 1, stack);
@@ -857,8 +857,12 @@ class PyCodeGen {
     return new TODO(node, "reduceForOfStatement");
   }
 
-  reduceForStatement(node, elements) {
-    return new TODO(node, "reduceForStatement");
+  reduceForStatement(node, { init, test, update, body }) {
+    body.lines.push(new Line(update));
+    return [
+      init,
+      new WhileExpression(test, body),
+    ];
   }
 
   reduceFormalParameters(node, elements) {
@@ -1177,7 +1181,7 @@ class PyCodeGen {
       return [elements, element];
     }
     let [elements, initToBind] = flatten(init);
-    elements = elements.flat(Infinity);
+    elements = elements.flat();
     // ------------
     elements.push(new Assignment(binding, initToBind));
     return elements;
