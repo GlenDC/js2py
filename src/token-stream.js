@@ -6,13 +6,8 @@ class TokenStream {
   }
 
   put(tokenStr, opts = {}) {
-    const { escape, putIndention, lineIndention } = opts;
-    if (putIndention && lineIndention > 0) {
-      this.result += this.indentionStr.repeat(lineIndention);
-      opts.putIndention = false; // so that we do not indent every sequent element on the line
-    }
-    if (escape) {
-      escape.forEach((pair) => {
+    if (opts.escape) {
+      opts.escape.forEach((pair) => {
         const [oldStr, newStr] = pair;
         tokenStr = tokenStr.replace(oldStr, newStr);
       });
@@ -20,16 +15,16 @@ class TokenStream {
     this.result += tokenStr;
   }
 
+  putNumber(number, opts) {
+    const tokenStr = renderNumber(number);
+    this.put(tokenStr, opts);
+  }
+
   putIndention(opts = {}) {
     const { lineIndention } = opts;
     if (lineIndention && lineIndention > 0) {
       this.put(this.indentionStr.repeat(lineIndention), opts);
     }
-  }
-
-  putNumber(number, opts) {
-    const tokenStr = renderNumber(number);
-    this.put(tokenStr, opts);
   }
 
   putEOL(opts) {

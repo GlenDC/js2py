@@ -303,7 +303,10 @@ class Line extends Token {
   }
 
   emit(ts, opts) {
-    this.statements.forEach((x) => x.emit(ts, opts));
+    if (this.statements.length > 0) {
+      ts.putIndention(opts);
+      this.statements.forEach((x) => x.emit(ts, opts));
+    }
     ts.putEOL(opts);
   }
 }
@@ -313,24 +316,22 @@ class Block extends Token {
   // - scoping
   constructor(...lines) {
     super();
-    this.lines = (lines || []).flat();
+    this.lines = (lines || []).flat().filter(line => {
+      return !(line instanceof Block && line.lines.length === 0);
+    });
     this.isTopLevel = false;
   }
 
   emit(ts, opts = {}) {
     if (this.lines.length > 0) {
-      const lineOpts = Object.assign({}, opts);
       this.lines.forEach((line) => {
-        lineOpts.putIndention = !(line instanceof Block);
-        line.emit(ts, lineOpts);
+        if (!(line instanceof Line) && !(line instanceof Block)) {
+          line = new Line(line);
+        }
+        line.emit(ts, opts);
       });
     } else if (!this.isTopLevel) {
-      pyKeywordPass.emit(
-        ts,
-        Object.assign(Object.assign({}, opts), {
-          putIndention: true,
-        })
-      );
+      new Line(new Keyword("pass")).emit(ts, opts);
     }
   }
 }
@@ -440,12 +441,19 @@ class Assignment extends InfixOperation {
     if (this.right instanceof ByOneOperation) {
       const statements = [
         this.right,
-        new Line(new Assignment(this.left, this.right.operand)),
+        new Assignment(this.left, this.right.operand),
       ];
       if (!this.right.isPrefix) {
         statements.reverse();
       }
-      statements.forEach(statement => statement.emit(ts, opts));
+      statements[0].emit(ts, opts);
+      // we never want to indent first statement in this case,
+      // either not needed, if top-level,
+      // or already done by parent (block)
+      ts.putEOL(opts);
+      // EOL at the end will be put by parent (block);
+      ts.putIndention(opts);
+      statements[1].emit(ts, opts);
     } else {
       this.left.emit(ts, opts);
       if (this.operator !== ",") {
@@ -471,12 +479,10 @@ class ByOneOperation extends Token {
   }
 
   emit(ts, opts) {
-    (new Line(
-      new Assignment(
-        this.operand,
-        new InfixOperation(this.operator, this.operand, new LiteralNumeric(1))
-      )
-    )).emit(ts, opts);
+    new Assignment(
+      this.operand,
+      new InfixOperation(this.operator, this.operand, new LiteralNumeric(1))
+    ).emit(ts, opts);
   }
 }
 
@@ -498,14 +504,14 @@ class MultiLineComment extends Token {
   }
 
   emit(ts, opts) {
-    ts.put(`"""`, opts);
-    ts.putEOL(opts);
+    const delim = new Line(new RawToken(`"""`));
+    delim.emit(ts, opts);
     this.lines.forEach((line) => {
-      ts.put(line, opts);
-      ts.putEOL(opts);
+      new Line(new RawToken(line)).emit(ts, opts);
     });
-    ts.put(`"""`, opts);
-    ts.putEOL(opts);
+    delim.emit(ts, opts);
+    // to make more python, add extra EOL
+    ts.putEOL();
   }
 }
 
@@ -522,16 +528,18 @@ class ImportStatement extends Token {
 
   emit(ts, opts) {
     if (this.children) {
-      ts.put(
-        `from ${this.moduleName} import ${this.children.join(", ")}`,
-        opts
-      );
+      new Line(
+        new RawToken(
+          `from ${this.moduleName} import ${this.children.join(", ")}`
+        )
+      ).emit(ts, opts);
       return;
     }
-    ts.put(`import ${this.moduleName}`, opts);
+    const statements = [new RawToken(`import ${this.moduleName}`)];
     if (this.alias) {
-      ts.put(` as ${this.alias}`, opts);
+      statements.push(new RawToken(` as ${this.alias}`));
     }
+    new Line(...statements).emit(ts, opts);
   }
 }
 
@@ -546,7 +554,7 @@ class WhileExpression extends Token {
     ts.put("while ", opts);
     this.test.emit(ts, opts);
     ts.put(":", opts);
-    ts.putEOL(opts);
+    ts.putEOL();
     this.body.emit(
       ts,
       Object.assign(Object.assign({}, opts), {
@@ -564,46 +572,58 @@ class IfExpression extends Token {
     this.alternate = alternate;
   }
 
-  emit(ts, opts = {}) {
-    const bodyOpts = Object.assign(Object.assign({}, opts), {
-      lineIndention: (opts.lineIndention || 0) + 1,
-      isAlternateOfIfExpression: false,
-    });
+  emit(ts, opts) {
+    this._emitConsequent(ts, opts);
+    this._emitAlternate(ts, opts);
+  }
 
-    const { isAlternateOfIfExpression } = opts;
-    if (isAlternateOfIfExpression) {
-      ts.put(
-        "elif ",
-        Object.assign(Object.assign({}, opts), {
-          putIndention: true,
-        })
+  _emitConsequent(ts, opts = {}) {
+    if (opts.isAlternateOfIfExpression) {
+      new Line(new RawToken(`elif `), this.test, new RawToken(":")).emit(
+        ts,
+        opts
       );
     } else {
       ts.put("if ", opts);
+      this.test.emit(ts, opts);
+      ts.put(":", opts);
+      ts.putEOL(opts);
     }
-    this.test.emit(ts, opts);
-    ts.put(":", opts);
-    ts.putEOL(opts);
-    this.consequent.emit(ts, bodyOpts);
-    if (this.alternate) {
-      if (this.alternate instanceof IfExpression) {
-        this.alternate.emit(
-          ts,
-          Object.assign(Object.assign({}, opts), {
-            isAlternateOfIfExpression: true,
-          })
-        );
-      } else {
-        ts.put(
-          "else:",
-          Object.assign(Object.assign({}, opts), {
-            putIndention: true,
-          })
-        );
-        ts.putEOL(opts);
-        this.alternate.emit(ts, bodyOpts);
-      }
+    this.consequent.emit(
+      ts,
+      Object.assign(Object.assign({}, opts), {
+        lineIndention: (opts.lineIndention || 0) + 1,
+        isAlternateOfIfExpression: false,
+      })
+    );
+  }
+
+  _emitAlternate(ts, opts) {
+    // if we have nothing to do, ..., do nothing ;)
+    if (!this.alternate) {
+      return;
     }
+
+    // collapse the code a bit in case the alternate token is
+    // a chained if expression, not needed, but easy enough, so why not
+    if (this.alternate instanceof IfExpression) {
+      this.alternate.emit(
+        ts,
+        Object.assign(Object.assign({}, opts), {
+          isAlternateOfIfExpression: true,
+        })
+      );
+      return;
+    }
+
+    new Line(new RawToken("else:")).emit(ts, opts);
+    this.alternate.emit(
+      ts,
+      Object.assign(Object.assign({}, opts), {
+        lineIndention: (opts.lineIndention || 0) + 1,
+        isAlternateOfIfExpression: true,
+      })
+    );
   }
 }
 
@@ -615,11 +635,7 @@ class TODO extends Token {
   }
 
   emit(ts, opts) {
-    ts.put(
-      `raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")`,
-      opts
-    );
-    ts.putEOL(opts);
+    ts.put(`raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")`);
   }
 }
 
@@ -635,8 +651,6 @@ const pyInf = new CallExpression(
 const pyNone = new Identifier("None");
 
 const pyEmpty = new RawToken("");
-
-const pyKeywordPass = new Keyword("pass");
 
 class PyCodeGen {
   constructor({ topLevelComment } = {}) {
@@ -898,7 +912,7 @@ class PyCodeGen {
   }
 
   reduceExpressionStatement(node, { expression }) {
-    return new Line(expression);
+    return expression;
   }
 
   reduceForAwaitStatement(node, elements) {
@@ -915,7 +929,7 @@ class PyCodeGen {
 
   reduceForStatement(node, { init, test, update, body }) {
     if (update) {
-      body.lines.push(new Line(update));
+      body.lines.push(update);
     }
     const whileExpr = new WhileExpression(test, body);
     return init ? [init, whileExpr] : whileExpr;
@@ -1047,24 +1061,22 @@ class PyCodeGen {
     if (this.topLevelComment) {
       const programSource = codeGen(node, new FormattedCodeGen());
       commentStatements.push(
-        new Line(
-          new MultiLineComment(
-            `DO NOT EDIT — Code generated by py2js v${projectVersion} on ${new Date(
-              new Date()
-            ).toISOString()}`,
-            "",
-            "input script:",
-            "```javascript",
-            programSource,
-            "```"
-          )
+        new MultiLineComment(
+          `DO NOT EDIT — Code generated by py2js v${projectVersion} on ${new Date(
+            new Date()
+          ).toISOString()}`,
+          "",
+          "input script:",
+          "```javascript",
+          programSource,
+          "```"
         )
       );
     }
 
     const importStatements = [];
     this.importedModules.forEach((importedModule) => {
-      importStatements.push(new Line(new ImportStatement(importedModule)));
+      importStatements.push(new ImportStatement(importedModule));
     });
     if (importStatements.length > 0) {
       importStatements.push(new Line(), new Line()); // as to make it a bit more Pythonic
