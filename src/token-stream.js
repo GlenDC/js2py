@@ -1,11 +1,16 @@
 class TokenStream {
   constructor() {
     this.result = "";
-    this.indentionStr = "    ";  // TODO: make it configurable later
-    this.newLineStr = "\n";  // TODO: make it configurable later
+    this.indentionStr = "    "; // TODO: make it configurable later
+    this.newLineStr = "\n"; // TODO: make it configurable later
   }
 
-  put(tokenStr, { escape } = {}) {
+  put(tokenStr, opts = {}) {
+    const { escape, putIndention, lineIndention } = opts;
+    if (putIndention && lineIndention > 0) {
+      this.result += this.indentionStr.repeat(lineIndention);
+      opts.putIndention = false; // so that we do not indent every sequent element on the line
+    }
     if (escape) {
       escape.forEach((pair) => {
         const [oldStr, newStr] = pair;

@@ -317,13 +317,11 @@ class Block extends Token {
 
   emit(ts, opts = {}) {
     if (this.lines) {
-      this.lines.forEach(line => {
-        if (!(line instanceof Block)) {
-          // avoid double indention due to sequential blocks
-          ts.putIndention(opts);
-        }
-        line.emit(ts, opts);
-      })
+      const lineOpts = Object.assign({}, opts);
+      this.lines.forEach((line) => {
+        lineOpts.putIndention = !(line instanceof Block);
+        line.emit(ts, lineOpts);
+      });
     }
   }
 }
@@ -341,12 +339,16 @@ class TemplateExpression extends Token {
     ts.put(`"`, opts);
     this.children.forEach((child) => {
       if (child instanceof RawToken) {
-        child.emit(ts, {
-          escape: [
-            [/\{/g, "{{"],
-            [/\}/g, "}}"],
-          ],
-        }, opts);
+        child.emit(
+          ts,
+          {
+            escape: [
+              [/\{/g, "{{"],
+              [/\}/g, "}}"],
+            ],
+          },
+          opts
+        );
       } else {
         ts.put("{", opts);
         child.emit(ts, opts);
@@ -468,7 +470,10 @@ class ImportStatement extends Token {
 
   emit(ts, opts) {
     if (this.children) {
-      ts.put(`from ${this.moduleName} import ${this.children.join(", ")}`, opts);
+      ts.put(
+        `from ${this.moduleName} import ${this.children.join(", ")}`,
+        opts
+      );
       return;
     }
     ts.put(`import ${this.moduleName}`, opts);
@@ -486,13 +491,67 @@ class WhileExpression extends Token {
   }
 
   emit(ts, opts) {
-    ts.put('while ', opts);
+    ts.put("while ", opts);
     this.test.emit(ts, opts);
-    ts.put(':', opts);
+    ts.put(":", opts);
     ts.putEOL(opts);
-    this.body.emit(ts, Object.assign(opts, {
-      lineIndention: (opts.lineIndention || 0) + (this.isTopLevel ? 0 : 1),
-    }));
+    this.body.emit(
+      ts,
+      Object.assign(Object.assign({}, opts), {
+        lineIndention: (opts.lineIndention || 0) + (this.isTopLevel ? 0 : 1),
+      })
+    );
+  }
+}
+
+class IfExpression extends Token {
+  constructor(test, consequent, alternate) {
+    super();
+    this.test = test;
+    this.consequent = consequent;
+    this.alternate = alternate;
+  }
+
+  emit(ts, opts = {}) {
+    const bodyOpts = Object.assign(Object.assign({}, opts), {
+      lineIndention: (opts.lineIndention || 0) + 1,
+      isAlternateOfIfExpression: false,
+    });
+
+    const { isAlternateOfIfExpression } = opts;
+    if (isAlternateOfIfExpression) {
+      ts.put(
+        "elif ",
+        Object.assign(Object.assign({}, opts), {
+          putIndention: true,
+        })
+      );
+    } else {
+      ts.put("if ", opts);
+    }
+    this.test.emit(ts, opts);
+    ts.put(":", opts);
+    ts.putEOL(opts);
+    this.consequent.emit(ts, bodyOpts);
+    if (this.alternate) {
+      if (this.alternate instanceof IfExpression) {
+        this.alternate.emit(
+          ts,
+          Object.assign(Object.assign({}, opts), {
+            isAlternateOfIfExpression: true,
+          })
+        );
+      } else {
+        ts.put(
+          "else:",
+          Object.assign(Object.assign({}, opts), {
+            putIndention: true,
+          })
+        );
+        ts.putEOL(opts);
+        this.alternate.emit(ts, bodyOpts);
+      }
+    }
   }
 }
 
@@ -506,7 +565,7 @@ class TODO extends Token {
   emit(ts, opts) {
     ts.put(
       `raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")`,
-      opts,
+      opts
     );
     ts.putEOL(opts);
   }
@@ -747,10 +806,7 @@ class PyCodeGen {
   }
 
   reduceDoWhileStatement(node, { body, test }) {
-    return [
-      body,
-      new WhileExpression(test, body),
-    ];
+    return [body, new WhileExpression(test, body)];
   }
 
   reduceEmptyStatement(node, elements) {
@@ -839,8 +895,8 @@ class PyCodeGen {
     return new Identifier(node.name);
   }
 
-  reduceIfStatement(node, elements) {
-    return new TODO(node, "reduceIfStatement");
+  reduceIfStatement(node, { test, consequent, alternate }) {
+    return new IfExpression(test, consequent, alternate);
   }
 
   reduceImport(node, elements) {
