@@ -746,8 +746,11 @@ class PyCodeGen {
     return new LiteralString(node.rawValue, delim);
   }
 
-  reduceDoWhileStatement(node, elements) {
-    return new TODO(node, "reduceDoWhileStatement");
+  reduceDoWhileStatement(node, { body, test }) {
+    return [
+      body,
+      new WhileExpression(test, body),
+    ];
   }
 
   reduceEmptyStatement(node, elements) {
