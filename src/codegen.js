@@ -1,5 +1,5 @@
 const { TokenStream } = require("./token-stream");
-const { default: codegen } = require("shift-codegen");
+const { default: codeGen, FormattedCodeGen } = require("shift-codegen");
 const { version: projectVersion } = require("../package.json");
 
 // some polyfill stuff
@@ -203,6 +203,8 @@ class RawToken extends Token {
 
 class Identifier extends RawToken {}
 
+class Keyword extends RawToken {}
+
 class LiteralBoolean extends RawToken {
   constructor(value) {
     super(value ? "True" : "False");
@@ -316,12 +318,19 @@ class Block extends Token {
   }
 
   emit(ts, opts = {}) {
-    if (this.lines) {
+    if (this.lines.length > 0) {
       const lineOpts = Object.assign({}, opts);
       this.lines.forEach((line) => {
         lineOpts.putIndention = !(line instanceof Block);
         line.emit(ts, lineOpts);
       });
+    } else if (!this.isTopLevel) {
+      pyKeywordPass.emit(
+        ts,
+        Object.assign(Object.assign({}, opts), {
+          putIndention: true,
+        })
+      );
     }
   }
 }
@@ -425,6 +434,49 @@ class InfixOperation extends Token {
 class Assignment extends InfixOperation {
   constructor(left, right) {
     super("=", left, right);
+  }
+
+  emit(ts, opts) {
+    if (this.right instanceof ByOneOperation) {
+      const statements = [
+        this.right,
+        new Line(new Assignment(this.left, this.right.operand)),
+      ];
+      if (!this.right.isPrefix) {
+        statements.reverse();
+      }
+      statements.forEach(statement => statement.emit(ts, opts));
+    } else {
+      this.left.emit(ts, opts);
+      if (this.operator !== ",") {
+        ts.put(" ", opts);
+      }
+      ts.put(`${this.operator} `, opts);
+      this.right.emit(ts, opts);
+    }
+  }
+}
+
+class ByOneOperation extends Token {
+  // NOTE: only in the case of being used as the right side of an assignment,
+  // does the difference between prefix and suffix mode matter
+  constructor(operator, operand, isPrefix) {
+    super();
+    if (operator !== "+" && operator !== "-") {
+      throw `invalid by-one operation operator "${operator}"`;
+    }
+    this.operator = operator;
+    this.operand = operand;
+    this.isPrefix = isPrefix;
+  }
+
+  emit(ts, opts) {
+    (new Line(
+      new Assignment(
+        this.operand,
+        new InfixOperation(this.operator, this.operand, new LiteralNumeric(1))
+      )
+    )).emit(ts, opts);
   }
 }
 
@@ -579,8 +631,12 @@ const pyInf = new CallExpression(
   new Identifier("float"),
   new LiteralString("+Inf")
 );
+
 const pyNone = new Identifier("None");
+
 const pyEmpty = new RawToken("");
+
+const pyKeywordPass = new Keyword("pass");
 
 class PyCodeGen {
   constructor({ topLevelComment } = {}) {
@@ -858,11 +914,11 @@ class PyCodeGen {
   }
 
   reduceForStatement(node, { init, test, update, body }) {
-    body.lines.push(new Line(update));
-    return [
-      init,
-      new WhileExpression(test, body),
-    ];
+    if (update) {
+      body.lines.push(new Line(update));
+    }
+    const whileExpr = new WhileExpression(test, body);
+    return init ? [init, whileExpr] : whileExpr;
   }
 
   reduceFormalParameters(node, elements) {
@@ -989,7 +1045,7 @@ class PyCodeGen {
 
     const commentStatements = [];
     if (this.topLevelComment) {
-      const programSource = codegen(node);
+      const programSource = codeGen(node, new FormattedCodeGen());
       commentStatements.push(
         new Line(
           new MultiLineComment(
@@ -1105,24 +1161,14 @@ class PyCodeGen {
   }
 
   reduceUpdateExpression(node, { operand }) {
-    if (!node.isPrefix) {
-      throw "TODO: postfix update expressions are not yet supported";
-    }
     switch (node.operator) {
       case "++":
-        return new Assignment(
-          operand,
-          new InfixOperation("+", operand, new LiteralNumeric(1))
-        );
+        return new ByOneOperation("+", operand, node.isPrefix);
       case "--":
-        return new Assignment(
-          operand,
-          new InfixOperation("-", operand, new LiteralNumeric(1))
-        );
+        return new ByOneOperation("-", operand, node.isPrefix);
       default:
         throw `invalid update expression operator '${node.operator}'`;
     }
-    // TODO: still not exactly correct as we should also be able to use the value immediately
   }
 
   reduceVariableDeclaration(node, { declarators }) {
