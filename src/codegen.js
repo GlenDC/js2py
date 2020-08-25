@@ -1,6 +1,7 @@
 const { TokenStream } = require("./token-stream");
 const { default: codeGen, FormattedCodeGen } = require("shift-codegen");
 const { version: projectVersion } = require("../package.json");
+const { Empty } = require("shift-codegen/dist/coderep");
 
 // some polyfill stuff
 if (!Array.prototype.flat) {
@@ -236,7 +237,14 @@ class LiteralString extends Token {
     if (this.isRaw) {
       ts.put("r", opts);
     }
-    ts.put(`${this.delim}${this.str}${this.delim}`, opts);
+    ts.put(this.delim, opts);
+    ts.put(
+      this.str,
+      Object.assign(Object.assign({}, opts), {
+        escape: [[this.delim, `\\${this.delim}`]],
+      })
+    );
+    ts.put(this.delim, opts);
   }
 }
 
@@ -264,17 +272,17 @@ class LiteralRegexp extends Token {
     ts.put('re.compile(r"', opts);
     ts.put(this.pattern.replace(/"/g, '\\"'), opts);
     ts.put('"', opts);
-    const opts = [];
+    const regOpts = [];
     if (this.dotAll) {
-      opts.push("re.DOTALL");
+      regOpts.push("re.DOTALL");
     }
     if (this.ignoreCase) {
-      opts.push("re.IGNORECASE");
+      regOpts.push("re.IGNORECASE");
     }
     if (this.multiLine) {
-      opts.push("re.MULTILINE");
+      regOpts.push("re.MULTILINE");
     }
-    opts.forEach((opt) => ts.put(`, ${opt}`, opts));
+    regOpts.forEach((opt) => ts.put(`, ${opt}`, opts));
     ts.put(")", opts);
   }
 }
@@ -353,7 +361,7 @@ class TemplateExpression extends Token {
     ) {
       delim = `"""`;
     }
-    const childEscapePairs = [[/"/g, `\"`]];
+    const childEscapePairs = [[/"/g, `\\"`]];
     if (this.children.some((child) => !(child instanceof RawToken))) {
       ts.put("f", opts);
       childEscapePairs.push([/\{/g, "{{"], [/\}/g, "}}"]);
@@ -363,9 +371,9 @@ class TemplateExpression extends Token {
       if (child instanceof RawToken) {
         child.emit(
           ts,
-          {
+          Object.assign(Object.assign({}, opts), {
             escape: childEscapePairs,
-          },
+          }),
           opts
         );
       } else {
@@ -1089,9 +1097,6 @@ class PyCodeGen {
     this.importedModules.forEach((importedModule) => {
       importStatements.push(new ImportStatement(importedModule));
     });
-    if (importStatements.length > 0) {
-      importStatements.push(new Line(), new Line()); // as to make it a bit more Pythonic
-    }
 
     const block = new Block(
       ...commentStatements,
