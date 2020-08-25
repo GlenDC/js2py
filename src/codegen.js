@@ -196,15 +196,8 @@ class RawToken extends Token {
     this.str = str;
   }
 
-  emit(ts, { escape } = {}) {
-    let out = this.str;
-    if (escape) {
-      escape.forEach((pair) => {
-        const [oldStr, newStr] = pair;
-        out = out.replace(oldStr, newStr);
-      });
-    }
-    ts.put(out);
+  emit(ts, opts) {
+    ts.put(this.str, opts);
   }
 }
 
@@ -222,8 +215,8 @@ class LiteralNumeric extends Token {
     this.x = x;
   }
 
-  emit(ts) {
-    ts.putNumber(this.x);
+  emit(ts, opts) {
+    ts.putNumber(this.x, opts);
   }
 }
 
@@ -235,11 +228,11 @@ class LiteralString extends Token {
     this.isRaw = !!isRaw;
   }
 
-  emit(ts) {
+  emit(ts, opts) {
     if (this.isRaw) {
-      ts.put("r");
+      ts.put("r", opts);
     }
-    ts.put(`${this.delim}${this.str}${this.delim}`);
+    ts.put(`${this.delim}${this.str}${this.delim}`, opts);
   }
 }
 
@@ -263,10 +256,10 @@ class LiteralRegexp extends Token {
     this.unicode = !!unicode;
   }
 
-  emit(ts) {
-    ts.put('re.compile(r"');
-    ts.put(this.pattern.replace(/"/g, '\\"'));
-    ts.put('"');
+  emit(ts, opts) {
+    ts.put('re.compile(r"', opts);
+    ts.put(this.pattern.replace(/"/g, '\\"'), opts);
+    ts.put('"', opts);
     const opts = [];
     if (this.dotAll) {
       opts.push("re.DOTALL");
@@ -277,8 +270,8 @@ class LiteralRegexp extends Token {
     if (this.multiLine) {
       opts.push("re.MULTILINE");
     }
-    opts.forEach((opt) => ts.put(`, ${opt}`));
-    ts.put(")");
+    opts.forEach((opt) => ts.put(`, ${opt}`, opts));
+    ts.put(")", opts);
   }
 }
 
@@ -288,16 +281,16 @@ class RawTuple extends Token {
     this.expressions = (expressions || []).flat();
   }
 
-  emit(ts) {
-    ts.put("(");
+  emit(ts, opts) {
+    ts.put("(", opts);
     if (this.expressions.length > 0) {
       for (let i = 0; i < this.expressions.length - 1; i++) {
-        this.expressions[i].emit(ts);
-        ts.put(", ");
+        this.expressions[i].emit(ts, opts);
+        ts.put(", ", opts);
       }
-      this.expressions[this.expressions.length - 1].emit(ts);
+      this.expressions[this.expressions.length - 1].emit(ts, opts);
     }
-    ts.put(")");
+    ts.put(")", opts);
   }
 }
 
@@ -307,27 +300,31 @@ class Line extends Token {
     this.statements = (statements || []).flat();
   }
 
-  emit(ts) {
-    this.statements.forEach((x) => x.emit(ts));
-    ts.putEOL();
+  emit(ts, opts) {
+    this.statements.forEach((x) => x.emit(ts, opts));
+    ts.putEOL(opts);
   }
 }
 
 class Block extends Token {
   // TODO:
   // - scoping
-  // - indention
   constructor(...lines) {
     super();
     this.lines = (lines || []).flat();
+    this.isTopLevel = false;
   }
 
-  emit(ts) {
-    this.forEach((x) => x.emit(ts));
-  }
-
-  forEach(f) {
-    this.lines.forEach((x) => x.forEach(f));
+  emit(ts, opts = {}) {
+    if (this.lines) {
+      this.lines.forEach(line => {
+        if (!(line instanceof Block)) {
+          // avoid double indention due to sequential blocks
+          ts.putIndention(opts);
+        }
+        line.emit(ts, opts);
+      })
+    }
   }
 }
 
@@ -337,11 +334,11 @@ class TemplateExpression extends Token {
     this.children = (children || []).flat();
   }
 
-  emit(ts) {
+  emit(ts, opts) {
     if (this.children.some((child) => !(child instanceof RawToken))) {
-      ts.put("f");
+      ts.put("f", opts);
     }
-    ts.put(`"`);
+    ts.put(`"`, opts);
     this.children.forEach((child) => {
       if (child instanceof RawToken) {
         child.emit(ts, {
@@ -349,14 +346,14 @@ class TemplateExpression extends Token {
             [/\{/g, "{{"],
             [/\}/g, "}}"],
           ],
-        });
+        }, opts);
       } else {
-        ts.put("{");
-        child.emit(ts);
-        ts.put("}");
+        ts.put("{", opts);
+        child.emit(ts, opts);
+        ts.put("}", opts);
       }
     });
-    ts.put(`"`);
+    ts.put(`"`, opts);
   }
 }
 
@@ -367,9 +364,9 @@ class CallExpression extends Token {
     this.arguments = new RawTuple(...args);
   }
 
-  emit(ts) {
-    this.callee.emit(ts);
-    this.arguments.emit(ts);
+  emit(ts, opts) {
+    this.callee.emit(ts, opts);
+    this.arguments.emit(ts, opts);
   }
 }
 
@@ -380,10 +377,10 @@ class PropertyGetterExpression extends Token {
     this.id = id;
   }
 
-  emit(ts) {
-    this.obj.emit(ts);
-    ts.put(".");
-    this.id.emit(ts);
+  emit(ts, opts) {
+    this.obj.emit(ts, opts);
+    ts.put(".", opts);
+    this.id.emit(ts, opts);
   }
 }
 
@@ -394,14 +391,14 @@ class PrefixOperation extends Token {
     this.expression = expression;
   }
 
-  emit(ts) {
-    ts.put(this.operator);
+  emit(ts, opts) {
+    ts.put(this.operator, opts);
     // parentheses aren't always required,
     // but they are always accepted in Python,
     // so better safe than sorry
-    ts.put("(");
-    this.expression.emit(ts);
-    ts.put(")");
+    ts.put("(", opts);
+    this.expression.emit(ts, opts);
+    ts.put(")", opts);
   }
 }
 
@@ -413,13 +410,13 @@ class InfixOperation extends Token {
     this.right = right;
   }
 
-  emit(ts) {
-    this.left.emit(ts);
+  emit(ts, opts) {
+    this.left.emit(ts, opts);
     if (this.operator !== ",") {
-      ts.put(" ");
+      ts.put(" ", opts);
     }
-    ts.put(`${this.operator} `);
-    this.right.emit(ts);
+    ts.put(`${this.operator} `, opts);
+    this.right.emit(ts, opts);
   }
 }
 
@@ -435,8 +432,8 @@ class Comment extends Token {
     this.str = str;
   }
 
-  emit(ts) {
-    ts.put(`# ${this.str}`);
+  emit(ts, opts) {
+    ts.put(`# ${this.str}`, opts);
   }
 }
 
@@ -446,13 +443,15 @@ class MultiLineComment extends Token {
     this.lines = (lines || []).flat();
   }
 
-  emit(ts) {
-    ts.put(`"""\n`);
+  emit(ts, opts) {
+    ts.put(`"""`, opts);
+    ts.putEOL(opts);
     this.lines.forEach((line) => {
-      ts.put(line);
-      ts.put("\n");
+      ts.put(line, opts);
+      ts.putEOL(opts);
     });
-    ts.put(`"""\n`);
+    ts.put(`"""`, opts);
+    ts.putEOL(opts);
   }
 }
 
@@ -467,15 +466,33 @@ class ImportStatement extends Token {
     this.alias = alias;
   }
 
-  emit(ts) {
+  emit(ts, opts) {
     if (this.children) {
-      ts.put(`from ${this.moduleName} import ${this.children.join(", ")}`);
+      ts.put(`from ${this.moduleName} import ${this.children.join(", ")}`, opts);
       return;
     }
-    ts.put(`import ${this.moduleName}`);
+    ts.put(`import ${this.moduleName}`, opts);
     if (this.alias) {
-      ts.put(` as ${this.alias}`);
+      ts.put(` as ${this.alias}`, opts);
     }
+  }
+}
+
+class WhileExpression extends Token {
+  constructor(test, body) {
+    super();
+    this.test = test;
+    this.body = body;
+  }
+
+  emit(ts, opts) {
+    ts.put('while ', opts);
+    this.test.emit(ts, opts);
+    ts.put(':', opts);
+    ts.putEOL(opts);
+    this.body.emit(ts, Object.assign(opts, {
+      lineIndention: (opts.lineIndention || 0) + (this.isTopLevel ? 0 : 1),
+    }));
   }
 }
 
@@ -486,10 +503,12 @@ class TODO extends Token {
     this.reduceFunc = reduceFunc;
   }
 
-  emit(ts) {
+  emit(ts, opts) {
     ts.put(
-      `raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")\n`
+      `raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")`,
+      opts,
     );
+    ts.putEOL(opts);
   }
 }
 
@@ -932,12 +951,14 @@ class PyCodeGen {
       importStatements.push(new Line(), new Line()); // as to make it a bit more Pythonic
     }
 
-    return new Block(
+    const block = new Block(
       ...commentStatements,
       ...importStatements,
       ...directives,
       ...statements
     );
+    block.isTopLevel = true;
+    return block;
   }
 
   reduceSetter(node, elements) {
@@ -1103,8 +1124,8 @@ class PyCodeGen {
     return elements;
   }
 
-  reduceWhileStatement(node, elements) {
-    return new TODO(node, "reduceWhileStatement");
+  reduceWhileStatement(node, { test, body }) {
+    return new WhileExpression(test, body);
   }
 
   reduceWithStatement(node, elements) {
