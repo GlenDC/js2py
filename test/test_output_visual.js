@@ -99,14 +99,26 @@ describe("OutputVisual", () => {
         [`/foo/`, `import re\n\nre.compile(r"foo")\n`],
         [`/"foo"/`, `import re\n\nre.compile(r"\\"foo\\"")\n`],
         [`/\\//`, `import re\n\nre.compile(r"\\/")\n`],
-        [`/www\\.[^.]+\\.com/`, `import re\n\nre.compile(r"www\\.[^.]+\\.com")\n`],
+        [
+          `/www\\.[^.]+\\.com/`,
+          `import re\n\nre.compile(r"www\\.[^.]+\\.com")\n`,
+        ],
         [`/foo/g`, `import re\n\nre.compile(r"foo")\n`],
         [`/foo/i`, `import re\n\nre.compile(r"foo", re.IGNORECASE)\n`],
         [`/foo/s`, `import re\n\nre.compile(r"foo", re.DOTALL)\n`],
         [`/foo/m`, `import re\n\nre.compile(r"foo", re.MULTILINE)\n`],
-        [`/foo/is`, `import re\n\nre.compile(r"foo", re.DOTALL, re.IGNORECASE)\n`],
-        [`/foo/si`, `import re\n\nre.compile(r"foo", re.DOTALL, re.IGNORECASE)\n`],
-        [`/foo/mis`, `import re\n\nre.compile(r"foo", re.DOTALL, re.IGNORECASE, re.MULTILINE)\n`],
+        [
+          `/foo/is`,
+          `import re\n\nre.compile(r"foo", re.DOTALL, re.IGNORECASE)\n`,
+        ],
+        [
+          `/foo/si`,
+          `import re\n\nre.compile(r"foo", re.DOTALL, re.IGNORECASE)\n`,
+        ],
+        [
+          `/foo/mis`,
+          `import re\n\nre.compile(r"foo", re.DOTALL, re.IGNORECASE, re.MULTILINE)\n`,
+        ],
       ];
       tests.forEach(([testInput, testOutput]) => {
         it(`should correctly interpret Regular Expression value: '${testInput}'`, () => {
@@ -122,6 +134,36 @@ describe("OutputVisual", () => {
 
   describe("BinaryOperations", () => {
     // TODO: test
+  });
+
+  describe("Javascript Tricks", () => {
+    describe("Convert to String (+)", () => {
+      // TODO: test
+    });
+
+    describe("Convert to Number (+)", () => {
+      // TODO: test
+    });
+
+    describe("Convert to Number (~~)", () => {
+      // TODO: test
+    });
+
+    describe("Float->Int (OR)", () => {
+      // TODO: test (23.9 | 0)
+    });
+
+    describe("Merge Objects", () => {
+      // TODO: test; {...person, ...tools, ...attributes}
+    });
+
+    describe("Destructuring Aliases", () => {
+      // TODO: test+code; const { x: otherName } = onst obj = { x: 1 };
+    });
+
+    describe("Comma Operator", () => {
+      // TODO: test; x = (x++, x);
+    });
   });
 
   describe("Loops", () => {
