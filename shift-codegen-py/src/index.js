@@ -15,6 +15,9 @@ exports.transpile = function (script, opts) {
   if (typeof t === "string" || t instanceof String) {
     t = parseScript(t);
   }
+  if (t === undefined) {
+    t = parseScript("");
+  }
 
   const generator = new PyCodeGen(opts);
   const rep = reduce(generator, t);

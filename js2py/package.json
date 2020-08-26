@@ -1,0 +1,31 @@
+{
+  "name": "js2py",
+  "version": "0.1.0",
+  "description": "a CLI tool to convert JS to Python",
+  "bin": "src/index.js",
+  "scripts": {
+    "format": "prettier --write src/**/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GlenDC/js2py.git"
+  },
+  "keywords": [
+    "transpiler",
+    "javascript",
+    "python",
+    "ast"
+  ],
+  "author": "Glen De Cauwsemaecker",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/GlenDC/js2py/issues"
+  },
+  "homepage": "https://github.com/GlenDC/js2py#readme",
+  "dependencies": {
+    "arg": "^4.1.3"
+  },
+  "devDependencies": {
+    "prettier": "^2.1.1"
+  }
+}
