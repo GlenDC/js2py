@@ -390,12 +390,38 @@ class CallExpression extends Token {
   constructor(callee, ...args) {
     super();
     this.callee = callee;
-    this.arguments = new RawTuple(...args);
+    this.arguments = (args || []).flat();
   }
 
   emit(ts, opts) {
+    const postElements = [];
+    const args = [];
+    for(let i = 0; i < this.arguments.length; ++i) {
+      if (this.arguments[i] instanceof ByOneOperation) {
+        if (this.arguments[i].isPrefix) {
+          this.arguments[i].emit(ts, opts);
+          ts.putEOL(opts);
+          ts.putIndention(opts);
+        } else {
+          postElements.push(this.arguments[i].toAssignment());
+        }
+        args.push(this.arguments[i].operand);
+      } else {
+        args.push(this.arguments[i]);
+      }
+    }
+
+    // emit the callee, init arguments will already have been added
     this.callee.emit(ts, opts);
-    this.arguments.emit(ts, opts);
+    // and the modified arguments
+    new RawTuple(...args).emit(ts, opts);
+
+    // draw all post elements
+    postElements.forEach(element => {
+      ts.putEOL(opts);
+      ts.putIndention(opts);
+      element.emit(ts, opts);
+    });
   }
 }
 
@@ -496,10 +522,14 @@ class ByOneOperation extends Token {
   }
 
   emit(ts, opts) {
-    new Assignment(
+    this.toAssignment().emit(ts, opts);
+  }
+
+  toAssignment() {
+    return new Assignment(
       this.operand,
       new InfixOperation(this.operator, this.operand, new LiteralNumeric(1))
-    ).emit(ts, opts);
+    );
   }
 }
 
@@ -564,7 +594,7 @@ class WhileExpression extends Token {
   constructor(test, body) {
     super();
     this.test = test;
-    this.body = body;
+    this.body = body instanceof Block ? body : new Block([body]);
   }
 
   emit(ts, opts) {
@@ -712,7 +742,7 @@ class PyCodeGen {
   }
 
   reduceAssignmentExpression(node, { binding, expression }) {
-    return new Assignment(binding, expression);
+    return this._reduceAssignmentStatement(binding, expression);
   }
 
   reduceAssignmentTargetIdentifier(node) {
@@ -823,9 +853,18 @@ class PyCodeGen {
   }
 
   reduceCallExpression(node, { callee, arguments: args }) {
+    // flatten the args when comma-separated trick is used
+    const resultElements = [];
+    const flatArgs = [];
+    args.forEach(arg => {
+      const [elements, element] = this._flattenCommaSeparatedElements(arg);
+      resultElements.push(...(elements.flat()));
+      flatArgs.push(element);
+    });
+  
     // TODO: support ignore console calls better,
     // as aliasing and other indirect uses of console will still fail...
-    const callExpression = new CallExpression(callee, args);
+    const callExpression = new CallExpression(callee, flatArgs);
     if (
       this.ignoreConsoleCalls &&
       (callee.str == "console" || (callee.obj && callee.obj.str === "console"))
@@ -833,6 +872,10 @@ class PyCodeGen {
       const ts = new TokenStream();
       callExpression.emit(ts);
       return new Comment(`code removed by js2py: ${ts.result}`);
+    }
+    if (resultElements.length > 0) {
+      resultElements.push(callExpression);
+      return resultElements;
     }
     return callExpression;
   }
@@ -1215,50 +1258,53 @@ class PyCodeGen {
     if (init === null) {
       init = pyNone;
     }
-    // ---------------
-    // as to emulate JS's behaviour of this silly comma-abuse, poor little comma
-    function flatten(element) {
-      let elements = [];
-      let startElement = element;
-      while (
-        startElement instanceof RawTuple &&
-        startElement.expressions.length === 1
-      ) {
-        startElement = startElement.expressions[0];
-      }
-      if (
-        startElement instanceof InfixOperation &&
-        startElement.operator === ","
-      ) {
-        // handle left element(s)
-        let innerElement = startElement.left;
-        while (
-          innerElement instanceof InfixOperation &&
-          innerElement.operator == ","
-        ) {
-          const [recElements, recElement] = flatten(innerElement.right);
-          elements.unshift(new Line(recElement));
-          if (recElements.length > 0) {
-            elements.unshift(recElements);
-          }
-          innerElement = innerElement.left;
-        }
-        elements.unshift(new Line(innerElement));
-        // handle right element(s)
-        let [rightElements, rightElement] = flatten(startElement.right);
-        while (rightElements.length > 0) {
-          elements.push(rightElements);
-          [rightElements, rightElement] = flatten(rightElement);
-        }
-        element = rightElement;
-      }
-      return [elements, element];
-    }
-    let [elements, initToBind] = flatten(init);
+    return this._reduceAssignmentStatement(binding, init);
+  }
+
+  _reduceAssignmentStatement(binding, init) {
+    let [elements, initToBind] = this._flattenCommaSeparatedElements(init);
     elements = elements.flat();
-    // ------------
     elements.push(new Assignment(binding, initToBind));
     return elements;
+  }
+
+  // as to emulate JS's behaviour of this silly comma-abuse, poor little comma
+  _flattenCommaSeparatedElements(element) {
+    let elements = [];
+    let startElement = element;
+    while (
+      startElement instanceof RawTuple &&
+      startElement.expressions.length === 1
+    ) {
+      startElement = startElement.expressions[0];
+    }
+    if (
+      startElement instanceof InfixOperation &&
+      startElement.operator === ","
+    ) {
+      // handle left element(s)
+      let innerElement = startElement.left;
+      while (
+        innerElement instanceof InfixOperation &&
+        innerElement.operator == ","
+      ) {
+        const [recElements, recElement] = this._flattenCommaSeparatedElements(innerElement.right);
+        elements.unshift(new Line(recElement));
+        if (recElements.length > 0) {
+          elements.unshift(recElements);
+        }
+        innerElement = innerElement.left;
+      }
+      elements.unshift(new Line(innerElement));
+      // handle right element(s)
+      let [rightElements, rightElement] = this._flattenCommaSeparatedElements(startElement.right);
+      while (rightElements.length > 0) {
+        elements.push(rightElements);
+        [rightElements, rightElement] = this._flattenCommaSeparatedElements(rightElement);
+      }
+      element = rightElement;
+    }
+    return [elements, element];
   }
 
   reduceWhileStatement(node, { test, body }) {
@@ -1276,50 +1322,6 @@ class PyCodeGen {
   reduceYieldGeneratorExpression(node, elements) {
     return new TODO(node, "reduceYieldGeneratorExpression");
   }
-}
-
-function escapeStringLiteral(stringValue) {
-  let result = "";
-  let nSingle = 0,
-    nDouble = 0;
-  for (let i = 0, l = stringValue.length; i < l; ++i) {
-    let ch = stringValue[i];
-    if (ch === '"') {
-      ++nDouble;
-    } else if (ch === "'") {
-      ++nSingle;
-    }
-  }
-  let delim = nDouble > nSingle ? "'" : '"';
-  result += delim;
-  for (let i = 0; i < stringValue.length; i++) {
-    let ch = stringValue.charAt(i);
-    switch (ch) {
-      case delim:
-        result += "\\" + delim;
-        break;
-      case "\n":
-        result += "\\n";
-        break;
-      case "\r":
-        result += "\\r";
-        break;
-      case "\\":
-        result += "\\\\";
-        break;
-      case "\u2028":
-        result += "\\u2028";
-        break;
-      case "\u2029":
-        result += "\\u2029";
-        break;
-      default:
-        result += ch;
-        break;
-    }
-  }
-  result += delim;
-  return result;
 }
 
 exports.PyCodeGen = PyCodeGen;
