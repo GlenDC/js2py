@@ -248,6 +248,9 @@ class LiteralString extends Token {
   }
 }
 
+
+// TODO: check differences between JS Regexp and Python Regexp,
+// and ensure that we transform correctly :)
 class LiteralRegexp extends Token {
   constructor(
     pattern,
