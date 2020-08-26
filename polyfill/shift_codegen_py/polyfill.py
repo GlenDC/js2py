@@ -87,7 +87,6 @@ class Scope(object):
       if stored_kind_value_pair[0] in [self.__REF_KIND_LET, self.__REF_KIND_CONST]:
         raise SyntaxError(f"Identifier '{name}' has already been declared")
       # store value in original value, hoist as such
-      # TODO: make sure this happens correct in all situations
       stored_kind_value_pair[1] = value
     else:
       self._refs[name] = [self.__REF_KIND_VAR, value]
