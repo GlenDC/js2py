@@ -206,8 +206,14 @@ describe("OutputVisual", () => {
         [`while (foo) bar(baz);`, `while foo:\n    bar(baz)\n\n`],
         [`while (foo) {}`, `while foo:\n    pass\n\n`],
         [`while (true) {}`, `while True:\n    pass\n\n`],
-        [`while (a && b) { b = a++ }`, `while a and b:\n    b = a\n    a = a + 1\n\n`],
-        [`while (a <= b()) { b = foo(x); baz(b) }`, `while a <= b():\n    b = foo(x)\n    baz(b)\n\n`],
+        [
+          `while (a && b) { b = a++ }`,
+          `while a and b:\n    b = a\n    a = a + 1\n\n`,
+        ],
+        [
+          `while (a <= b()) { b = foo(x); baz(b) }`,
+          `while a <= b():\n    b = foo(x)\n    baz(b)\n\n`,
+        ],
       ];
       tests.forEach(([testInput, testOutput]) => {
         it(`should correctly interpret while loop: '${testInput}'`, () => {
@@ -218,11 +224,20 @@ describe("OutputVisual", () => {
 
     describe("Do-While Loops", () => {
       const tests = [
-        [`do { bar(baz); } while (foo)`, `bar(baz)\nwhile foo:\n    bar(baz)\n\n`],
+        [
+          `do { bar(baz); } while (foo)`,
+          `bar(baz)\nwhile foo:\n    bar(baz)\n\n`,
+        ],
         [`do {} while (foo)`, `while foo:\n    pass\n\n`],
         [`do {} while (true) {}`, `while True:\n    pass\n\n`],
-        [`do { b = a++ } while (a && b)`, `b = a\na = a + 1\nwhile a and b:\n    b = a\n    a = a + 1\n\n`],
-        [`do { b = foo(x); baz(b) } while (a <= b())`, `b = foo(x)\nbaz(b)\nwhile a <= b():\n    b = foo(x)\n    baz(b)\n\n`],
+        [
+          `do { b = a++ } while (a && b)`,
+          `b = a\na = a + 1\nwhile a and b:\n    b = a\n    a = a + 1\n\n`,
+        ],
+        [
+          `do { b = foo(x); baz(b) } while (a <= b())`,
+          `b = foo(x)\nbaz(b)\nwhile a <= b():\n    b = foo(x)\n    baz(b)\n\n`,
+        ],
       ];
       tests.forEach(([testInput, testOutput]) => {
         it(`should correctly interpret do-while loop: '${testInput}'`, () => {

@@ -54,4 +54,6 @@ function renderNumber(n) {
     .replace(/[eE]\+/, "e");
 }
 
-exports.TokenStream = TokenStream;
+module.exports = {
+  TokenStream,
+};
