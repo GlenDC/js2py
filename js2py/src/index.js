@@ -16,7 +16,7 @@ const args = arg(
 );
 
 console.log(
-  transpile(process.argv[2], {
+  transpile(args._, {
     topLevelComment: args["--tlt-comment"] || false,
   })
 );
