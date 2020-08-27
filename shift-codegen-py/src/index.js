@@ -6,11 +6,8 @@ const { TokenStream } = require("./token-stream");
 
 function transpile(script, opts) {
   let t = script;
-  if (typeof t === "string" || t instanceof String) {
-    t = parseScript(t);
-  }
-  if (t === undefined) {
-    t = parseScript("");
+  if (typeof t === "string" || t instanceof String || t === undefined) {
+    t = parseScript(t || "");
   }
 
   const generator = new PyCodeGen(opts);
