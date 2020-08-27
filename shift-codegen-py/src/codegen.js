@@ -676,4 +676,6 @@ class PyCodeGen {
   }
 }
 
-exports.PyCodeGen = PyCodeGen;
+module.exports = {
+  PyCodeGen,
+};
