@@ -1,5 +1,6 @@
 const repl = require('repl');
 const path = require('path');
+const fs = require('fs');
 const { spawn: spawnProcess } = require('child_process');
 
 const { parseScript } = require("shift-parser");
@@ -10,10 +11,11 @@ const { TokenStream } = require("../../shift-codegen-py/src/token-stream");
 const { time } = require('console');
 
 class REPL {
-  constructor() {
+  constructor({ verbose } = {}) {
     this._generator = new PyCodeGen({
       topLevelComment: false,
     });
+    this._verbose = verbose;
     
 
     // TODO: Future: somehow make a virtual-env workspace on user machine,
@@ -43,7 +45,7 @@ class REPL {
     rep.emit(ts);
 
     this._pythonCmd.stdin.write(ts.result);
-    callback(null, ts.result);
+    callback(null, this._verbose ? ts.result : null);
   }
 
   _canJSErrorBeRecovered(error) {
@@ -51,7 +53,7 @@ class REPL {
   }
 
   write(output) {
-    return output.trim();
+    return output ? output.trim() : '';
   }
 
   close() {

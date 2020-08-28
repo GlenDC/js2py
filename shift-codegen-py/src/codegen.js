@@ -421,8 +421,9 @@ class PyCodeGen {
     );
   }
 
-  reduceLiteralStringExpression(node, elements) {
-    return new LiteralString(node.rawValue, delim, true);
+  reduceLiteralStringExpression(node) {
+    const delim = node.value.match(/(^|[^\\])(\\\\)*"/) ? "'" : '"';
+    return new LiteralString(node.value, delim, true);
   }
 
   reduceMethod(node, elements) {
