@@ -102,9 +102,9 @@ if (args["--help"]) {
 
 // Show version and exit
 if (args["--version"]) {
-  console.log(
-    `js2py v${packageInfoVersion} on ${os.type()}-${os.release()}-${os.arch()}\n`
-  );
+  console.log(`js2py v${packageInfoVersion}`);
+  console.log(`NodeJS ${process.version} on ${os.type()}-${os.release()}-${os.arch()}`);
+  console.log(``);
   exit(0);
 }
 
@@ -122,7 +122,7 @@ if (args._.length > 0) {
 console.log(
   `Hello ${
     os.userInfo().username
-  } on ${os.type()}-${os.release()}-${os.arch()} :)`
+  } on NodeJS ${process.version} ${os.type()}-${os.release()}-${os.arch()} :)`
 );
 console.log(`Versions > js2py v${packageInfoVersion}`);
 console.log(
