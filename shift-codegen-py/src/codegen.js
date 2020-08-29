@@ -423,7 +423,7 @@ class PyCodeGen {
 
   reduceLiteralStringExpression(node) {
     const delim = node.value.match(/(^|[^\\])(\\\\)*"/) ? "'" : '"';
-    return new LiteralString(node.value, delim, true);
+    return new LiteralString(node.value, delim);
   }
 
   reduceMethod(node, elements) {
