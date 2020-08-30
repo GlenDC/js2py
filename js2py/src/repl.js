@@ -1,6 +1,7 @@
 const repl = require("repl");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const { spawn: spawnProcess } = require("child_process");
 
 const { parseScript } = require("shift-parser");
@@ -40,8 +41,25 @@ class REPL {
       tree = parseScript(cmd); // this can fail if incomplete for example
     } catch (e) {
       if (this._canJSErrorBeRecovered(e)) {
-        return callback(new repl.Recoverable(e));
+        callback(new repl.Recoverable(e));
+        return;
       }
+
+      // output error in a readable manner
+      const errStr = e.toString();
+      const [_mStr, lineStr, colStr, errMsg] = errStr.match(
+        /Error: \[(\d+):(\d+)]: (.+)/i
+      );
+      const colNr = Number(colStr);
+      const errCmdLine = cmd.split(/\r?\n/)[Number(lineStr) - 1];
+      const outputLines = [
+        `File "<stdin>", line ${lineStr}`,
+        `  ${errCmdLine}`,
+      ];
+      outputLines.push(`${" ".repeat(Number(colStr) + 1)}^`);
+      outputLines.push(`SyntaxError: ${errMsg}`);
+      callback(null, outputLines.join(os.EOL));
+      return;
     }
     const rep = reduce(this._generator, tree);
     const ts = new TokenStream();

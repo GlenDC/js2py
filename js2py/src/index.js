@@ -103,7 +103,9 @@ if (args["--help"]) {
 // Show version and exit
 if (args["--version"]) {
   console.log(`js2py v${packageInfoVersion}`);
-  console.log(`NodeJS ${process.version} on ${os.type()}-${os.release()}-${os.arch()}`);
+  console.log(
+    `NodeJS ${process.version} on ${os.type()}-${os.release()}-${os.arch()}`
+  );
   console.log(``);
   exit(0);
 }
@@ -120,9 +122,9 @@ if (args._.length > 0) {
 
 // Print the versions and other info
 console.log(
-  `Hello ${
-    os.userInfo().username
-  } on NodeJS ${process.version} ${os.type()}-${os.release()}-${os.arch()} :)`
+  `Hello ${os.userInfo().username} on NodeJS ${
+    process.version
+  } ${os.type()}-${os.release()}-${os.arch()} :)`
 );
 console.log(`Versions > js2py v${packageInfoVersion}`);
 console.log(
@@ -160,7 +162,7 @@ try {
   // handles user requests, anyway.
   fs.statSync(historyFP);
 
-  // load command history from a file called .node_repl history in the current directory
+  // load command history from history file in the current directory
   fs.readFileSync(historyFP)
     .toString()
     .split("\n")
