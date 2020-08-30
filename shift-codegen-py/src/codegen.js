@@ -677,6 +677,10 @@ class PyCodeGen {
   }
 }
 
+function rawTupleIfNeeded(node, precedence, a) {
+  return GetPrecedence(node) < precedence ? new RawTuple(a) : a;
+}
+
 module.exports = {
   PyCodeGen,
 };

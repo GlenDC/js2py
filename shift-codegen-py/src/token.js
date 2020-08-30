@@ -155,10 +155,6 @@ function GetPrecedence(node) {
   }
 }
 
-function rawTupleIfNeeded(node, precedence, a) {
-  return GetPrecedence(node) < precedence ? new RawTuple(a) : a;
-}
-
 // TODO: find a good way to check if an expression evaluates to an expected:
 // - type of token
 // - type of token with a specific property set

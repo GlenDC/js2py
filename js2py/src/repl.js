@@ -61,6 +61,7 @@ class REPL {
       callback(null, outputLines.join(os.EOL));
       return;
     }
+
     const rep = reduce(this._generator, tree);
     const ts = new TokenStream();
     rep.emit(ts);
@@ -76,7 +77,10 @@ class REPL {
   }
 
   write(output) {
-    return output ? output.trim() : "";
+    if (!output) {
+      return "";
+    }
+    return output.trim ? output.trim() : output;
   }
 
   close() {
