@@ -44,16 +44,16 @@ const argDefinitions = [
     type: String,
     name: "--history",
   },
+  // {
+  //   description:
+  //     "evaluate the Python code via a Python REPL server (by default one is spawned for you locally when used)",
+  //   type: Boolean,
+  //   name: "--eval",
+  //   shorthand: "-e",
+  // },
   {
     description:
-      "evaluate the Python code via a Python REPL server (by default one is spawned for you locally when used)",
-    type: Boolean,
-    name: "--eval",
-    shorthand: "-e",
-  },
-  {
-    description:
-      "used together with --eval to use a running Python REPL server",
+    "used to connect to a running Python REPL server such that transpiled commands can be evaluated", // "used together with --eval to use a running Python REPL server",
     type: String,
     name: "--eval-server",
   },

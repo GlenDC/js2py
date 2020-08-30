@@ -30,10 +30,6 @@ class REPL {
     });
     this._evalPython = evalPython || evalPythonServer; // only possible when server defined for now
     this._evalPythonServer = evalPythonServer;
-
-    // TODO: Future: somehow make a virtual-env workspace on user machine,
-    // (or use perhaps existing one if it exists) and make sure our shift_codegen_py module
-    // is installed there such that we can just run it as such
     const polyfillPythonDir = path.join(__dirname, "..", "..", "polyfill");
 
     // TODO: Future: allow server to also be created and managed by this process
