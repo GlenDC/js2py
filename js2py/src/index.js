@@ -54,7 +54,7 @@ const argDefinitions = [
   {
     description:
       "used together with --eval to use a running Python REPL server",
-    type: Boolean,
+    type: String,
     name: "--eval-server",
   },
 ];

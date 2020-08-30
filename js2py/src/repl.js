@@ -2,21 +2,33 @@ const repl = require("repl");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const { spawn: spawnProcess } = require("child_process");
+const socket = require("socket.io-client");
+const url = require('url');
 
 const { parseScript } = require("shift-parser");
 const { reduce } = require("shift-reducer");
 
 const { PyCodeGen } = require("../../shift-codegen-py/src/codegen");
 const { TokenStream } = require("../../shift-codegen-py/src/token-stream");
-const { time } = require("console");
+const { ENGINE_METHOD_DIGESTS } = require("constants");
+
+function createSocketClient(serverAddress) {
+  // TODO: handle connection failure better,
+  // seems that if we cannot connect (e.g. due to bad http call),
+  // that we also do not fail anywhere, but that emitting won't do anything
+  // and in that case (of conn failure) we will also need CTRL+C after exiting to actually exit
+  let client = socket.connect(serverAddress, {reconnect: true});
+  client.on('connect', () => {});
+  client.on('disconnect', () => {});
+  return client;
+}
 
 class REPL {
   constructor({ evalPython, evalPythonServer } = {}) {
     this._generator = new PyCodeGen({
       topLevelComment: false,
     });
-    this._evalPython = evalPython;
+    this._evalPython = evalPython || evalPythonServer; // only possible when server defined for now
     this._evalPythonServer = evalPythonServer;
 
     // TODO: Future: somehow make a virtual-env workspace on user machine,
@@ -24,14 +36,9 @@ class REPL {
     // is installed there such that we can just run it as such
     const polyfillPythonDir = path.join(__dirname, "..", "..", "polyfill");
 
-    if (this._eval) {
-      // TODO: Now: do this via a socket so we can have a clean request-response flow instead of this subprocess stdin/stdout hack
-      // TODO: Now: display the generated python nicely with each line prefixed with `>`, need to check that new lines break correctly (and not for example when in string)
-      this._pythonCmd = spawnProcess("python", ["repl.py"], {
-        cwd: polyfillPythonDir,
-        stdio: ["pipe", process.stdout, process.stderr],
-      });
-      this._pythonCmd.stdin.setEncoding("utf-8");
+    // TODO: Future: allow server to also be created and managed by this process
+    if (this._evalPython) {
+      this._PythonClient = createSocketClient(evalPythonServer);
     }
   }
 
@@ -67,9 +74,16 @@ class REPL {
     rep.emit(ts);
 
     if (this._evalPython) {
-      this._pythonCmd.stdin.write(ts.result);
+      this._PythonClient.emit('eval', {cmd: ts.result}, evalOutput => {
+        if (!evalOutput) {
+          callback(null, ts.result);
+          return;
+        }
+        callback(null, `${ts.result}# Outputs:${os.EOL}${evalOutput.trim().split('\r\n').map(v => `# ${v}`).join(os.EOL)}`);
+      });
+    } else {
+      callback(null, ts.result);
     }
-    callback(null, ts.result);
   }
 
   _canJSErrorBeRecovered(error) {
@@ -85,7 +99,7 @@ class REPL {
 
   close() {
     if (this._evalPython) {
-      this._pythonCmd.stdin.end();
+      this._PythonClient.disconnect();
     }
   }
 }

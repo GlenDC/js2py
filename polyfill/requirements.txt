@@ -1,13 +1,18 @@
 aiohttp==3.6.2
 async-timeout==3.0.1
 attrs==20.1.0
+certifi==2020.6.20
 chardet==3.0.4
 idna==2.10
 multidict==4.7.6
 netifaces==0.10.6
+pexpect==4.8.0
+ptyprocess==0.6.0
 python-engineio==3.13.2
 python-socketio==4.6.0
--e git+git@github.com:GlenDC/js2py.git@515ae7fbc1ca7d88a8c7613bf0e79567a27b8f9f#egg=shift_codegen_py&subdirectory=polyfill
+requests==2.24.0
+-e git+git@github.com:GlenDC/js2py.git@bff0986b52fd2116c15c93be9880b5e97d87f599#egg=shift_codegen_py&subdirectory=polyfill
 six==1.15.0
 typing-extensions==3.7.4.3
+urllib3==1.25.10
 yarl==1.5.1
