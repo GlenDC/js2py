@@ -53,7 +53,7 @@ const argDefinitions = [
   // },
   {
     description:
-    "used to connect to a running Python REPL server such that transpiled commands can be evaluated", // "used together with --eval to use a running Python REPL server",
+      "used to connect to a running Python REPL server such that transpiled commands can be evaluated", // "used together with --eval to use a running Python REPL server",
     type: String,
     name: "--eval-server",
   },
