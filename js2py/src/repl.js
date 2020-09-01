@@ -4,12 +4,15 @@ const fs = require("fs");
 const os = require("os");
 const socket = require("socket.io-client");
 const url = require("url");
+const gaze = require("gaze");
 
 const { parseScript } = require("shift-parser");
 const { reduce } = require("shift-reducer");
 
-const { PyCodeGen } = require("../../shift-codegen-py/src/codegen");
-const { TokenStream } = require("../../shift-codegen-py/src/token-stream");
+// TODO: load this correctly as `shift-codegen-py`,
+// being able to use a linked version if used (with hot reloading still working)
+const js2pyImportPath = "../../shift-codegen-py/src";
+let js2py = require(js2pyImportPath);
 
 function createSocketClient(serverAddress) {
   // TODO: handle connection failure better,
@@ -24,7 +27,7 @@ function createSocketClient(serverAddress) {
 
 class REPL {
   constructor({ evalPython, evalPythonServer } = {}) {
-    this._generator = new PyCodeGen({
+    this._generator = new js2py.PyCodeGen({
       topLevelComment: false,
     });
     this._evalPython = evalPython || evalPythonServer; // only possible when server defined for now
@@ -34,6 +37,33 @@ class REPL {
     if (this._evalPython) {
       this._PythonClient = createSocketClient(evalPythonServer);
     }
+
+    let self = this;
+    this._fsWatchers = [];
+    if (process.env.JS2PY_HOT_RELOAD) {
+      gaze(
+        `${path.dirname(require.resolve(js2pyImportPath))}/**/*.js`,
+        (err, watcher) => {
+          watcher.on("all", (filepath) => {
+            Object.keys(require.cache).forEach((k) => {
+              if (k.match(/shift-codegen-py\/src/i)) {
+                delete require.cache[k];
+              }
+            });
+            self._reload();
+          });
+          this._fsWatchers.push(watcher);
+        }
+      );
+    }
+  }
+
+  // used to support hot reloading
+  _reload() {
+    js2py = require("../../shift-codegen-py/src");
+    this._generator = new js2py.PyCodeGen({
+      topLevelComment: false,
+    });
   }
 
   eval(cmd, context, filename, callback) {
@@ -64,7 +94,7 @@ class REPL {
     }
 
     const rep = reduce(this._generator, tree);
-    const ts = new TokenStream();
+    const ts = new js2py.TokenStream();
     rep.emit(ts);
 
     if (this._evalPython) {
@@ -102,6 +132,8 @@ class REPL {
     if (this._evalPython) {
       this._PythonClient.disconnect();
     }
+    // close FS watchers
+    this._fsWatchers.forEach((watcher) => watcher.close());
   }
 }
 

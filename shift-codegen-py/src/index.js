@@ -24,4 +24,6 @@ function transpile(script, opts) {
 
 module.exports = {
   transpile,
+  PyCodeGen,
+  TokenStream,
 };

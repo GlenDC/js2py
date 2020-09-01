@@ -2,10 +2,13 @@ import sys
 import json
 import socketio
 import io
+import os
+import importlib
 from aiohttp import web
 
 from pexpect import replwrap
 
+import polyfill
 from polyfill import *
 
 sio = socketio.AsyncServer()
@@ -16,17 +19,31 @@ repl = replwrap.python()
 
 def push_and_read_eval(cmd):
   return repl.run_command(cmd)
+
+polyfill_py_last_modified_time = 0
+polyfill_py_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'polyfill.py')
+
+def hotreload_polyfill_library_if_desired():
+  global polyfill_py_last_modified_time
+  if not os.getenv('POLYFILL_HOT_RELOAD'):
+    return  # nothing to do
+  # reload the polyfill pkg if it was modified
+  polyfill_py_last_modified_time_new = os.path.getmtime(polyfill_py_path)
+  if polyfill_py_last_modified_time_new > polyfill_py_last_modified_time:
+      importlib.reload(polyfill)
+      polyfill_py_last_modified_time = polyfill_py_last_modified_time_new
   
 @sio.event
 def connect(sid, environ):
-    print('connection established')
+  print('connection established')
 
 @sio.event
 def eval(sid, data):
-    try:
-        return push_and_read_eval(data['cmd'])
-    except Exception as e:
-        return str(e)
+  try:
+    hotreload_polyfill_library_if_desired()
+    return push_and_read_eval(data['cmd'])
+  except Exception as e:
+    return str(e)
 
 @sio.event
 def disconnect(sid):
