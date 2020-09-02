@@ -65,6 +65,12 @@ const argDefinitions = [
     type: String,
     name: "--eval-server",
   },
+  {
+    description: "opt-in filepath to be used such that all STDOUT displayed is written to the given file path instead of the STDOUT. In REPL mode it is however still displayed in the STDOUT as well",
+    type: String,
+    name: "--output",
+    shorthand: "-o",
+  },
 ];
 
 const args = arg(
@@ -119,11 +125,15 @@ if (args["--version"]) {
 }
 
 function transpileAndExit(input) {
-  console.log(
-    transpile(input, {
-      topLevelComment: !!args["--tl-comment"],
-    })
-  );
+  const output = transpile(input, {
+    topLevelComment: !!args["--tl-comment"],
+  });
+  const filePath = args["--output"];
+  if (filePath) {
+    fs.writeFileSync(filePath, output);
+  } else {
+    console.log(output);
+  }
   exit(0);
 }
 
@@ -133,15 +143,36 @@ if (args._.length > 0) {
 }
 
 // used for an interactive REPL session
-function startREPL() {
+function startREPL() {  
+  const outputPath = args["--output"];
+  let printFn = (content) => console.log(content);
+  let fileLogger;
+  if (outputPath) {
+    // also write stdout to a file
+    const ws = fs.createWriteStream(outputPath);
+    [`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`].forEach((eventType) => {
+      process.on(eventType, () => {
+        ws.close();
+      });
+    });
+    fileLogger = (content) => {
+      ws.write(content);
+    }
+    printFn = (content) => {
+      console.log(content);
+      fileLogger(content);
+      fileLogger(os.EOL);
+    };
+  }
+
   // Print the versions and other info
-  console.log(
+  printFn(
     `Hello ${os.userInfo().username} on NodeJS ${
       process.version
     } ${os.type()}-${os.release()}-${os.arch()} :)`
   );
-  console.log(`Versions > js2py v${packageInfoVersion}`);
-  console.log(
+  printFn(`Versions > js2py v${packageInfoVersion}`);
+  printFn(
     `Please report any bugs you encounter in full detail on: ${packageInfoBugs.url}`
   );
 
@@ -157,11 +188,25 @@ function startREPL() {
 
   const js2pyREPLRunner = repl.start({
     prompt: ">>> ",
-    eval: function (...args) {
-      js2pyREPL.eval(...args);
+    eval: function (cmd, context, filename, callback) {
+      js2pyREPL.eval(cmd, context, filename, (error, output) => {
+        if (!error && fileLogger) {
+          let lines = cmd.trim().split(os.EOL);
+          fileLogger(`>>> ${lines[0]}${os.EOL}`);
+          lines.slice(1).forEach(line => {
+            fileLogger(`... ${line}${os.EOL}`);
+          })
+        }
+        callback(error, output);
+      });
     },
     writer: function (...args) {
-      return js2pyREPL.write(...args);
+      const output = js2pyREPL.write(...args);
+      if (fileLogger) {
+        fileLogger(output);
+        fileLogger(os.EOL);
+      }
+      return output;
     },
     ignoreUndefined: true,
     preview: false,
@@ -216,6 +261,21 @@ fs.fstat(0, function (err, stats) {
     terminal: false,
   });
 
+  let writeResult = (content) => console.log(content);
+  const filePath = args["--output"];
+  if (filePath) {
+    const ws = fs.createWriteStream(filePath);
+    [`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`].forEach((eventType) => {
+      process.on(eventType, () => {
+        ws.close();
+      });
+    });
+    writeResult = (content) => {
+      ws.write(content);
+      ws.write(os.EOL);
+    }
+  }
+
   // try to parse as quickly as possible,
   // handling "unexpected EOI" errors nicely, given these are expected
   rl.on("line", function (line) {
@@ -233,7 +293,7 @@ fs.fstat(0, function (err, stats) {
     const rep = reduce(gen, tree);
     const ts = new TokenStream();
     rep.emit(ts);
-    console.log(ts.result.trim());
+    writeResult(ts.result.trim());
     input = "";
   });
   // parse remaining text
@@ -242,6 +302,6 @@ fs.fstat(0, function (err, stats) {
     const rep = reduce(gen, tree);
     const ts = new TokenStream();
     rep.emit(ts);
-    console.log(ts.result.trim());
+    writeResult(ts.result.trim());
   }
 });
