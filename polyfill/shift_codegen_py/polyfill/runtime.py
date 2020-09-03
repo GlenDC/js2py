@@ -21,6 +21,12 @@ from collections.abc import Sequence
 # - support automated linting
 
 
+# TODO:
+# - validate that all operators work correctly
+# - check if our JSNaN and JSInfinity can rely more on JSNumber for operators
+# - check JSInfinity handles its sign correctly in its operators
+
+
 class JSObject(object):
   def __init__(self, ref=None):
     self._properties = {}
@@ -47,6 +53,166 @@ class JSObject(object):
   def call(self, *args):
     raise TypeError(f"{self._ref} is not a function")
 
+  # Str representation,
+  # important when for example adding with a string
+
+  def __repr__(self):
+    return self.__str__()
+
+  def __str__(self):
+    return "[object Object]"
+
+  # Bool representation
+  
+  def __bool__(self):
+    return True
+
+  # Number representation
+  
+  def __float__(self):
+    return JSNaN()
+
+  # Unary Operators
+
+  def __neg__(self):
+    return JSNaN()
+
+  def __pos__(self):
+    return JSNaN()
+
+  def __invert__(self):
+    return JSNumber(-1)
+
+  # Absolute value, in JSLand triggered via Math.abs
+
+  def __abs__(self):
+    return JSNaN()
+
+  # Binary Operators
+
+  def __add__(self, other):
+    return str(self) + str(other)
+
+  def __radd__(self, other):
+    return self + other
+
+  def __iadd__(self, other):
+    return self + other
+
+  def __sub__(self, other):
+    return JSNaN()
+
+  def __rsub__(self, other):
+    return self - other
+
+  def __isub__(self, other):
+    return self - other
+
+  def __mul__(self, other):
+    return JSNaN()
+
+  def __rmul__(self, other):
+    return self * other
+
+  def __imul__(self, other):
+    return self * other
+
+  def __truediv__(self, other):
+    return JSNaN()
+
+  def __rtruediv__(self, other):
+    return self / other
+
+  def __itruediv__(self, other):
+    return self / other
+
+  # Javascript has no floor div
+
+  def __mod__(self, other):
+    return JSNaN()
+
+  def __rmod__(self, other):
+    return self % other
+
+  def __imod__(self, other):
+    return self % other
+
+  def __pow__(self, other):
+    return JSNaN()
+
+  def __rpow__(self, other):
+    return self % other
+
+  def __ipow__(self, other):
+    return self % other
+
+  # Binary bitwise operators
+
+  def __and__(self, other):
+    return JSNumber(0)
+
+  def __rand__(self, other):
+    return self & other
+
+  def __iand__(self, other):
+    return self & other
+
+  def __or__(self, other):
+    return JSNumber(0) | other
+
+  def __ror__(self, other):
+    return self | other
+
+  def __ior__(self, other):
+    return self | other
+
+  def __xor__(self, other):
+    return JSNumber(0) ^ other
+
+  def __rxor__(self, other):
+    return self ^ other
+
+  def __ixor__(self, other):
+    return self ^ other
+
+  def __lshift__(self, other):
+    return JSNumber(0) << other
+
+  def __rlshift__(self, other):
+    return self << other
+
+  def __ilshift__(self, other):
+    return self << other
+
+  def __rshift__(self, other):
+    return JSNumber(0) >> other
+
+  def __rrshift__(self, other):
+    return self >> other
+
+  def __irshift__(self, other):
+    return self >> other
+
+  # Binary logic operators
+
+  def __eq__(self, other):
+    return id(self) == id(other)
+
+  def __neq__(self, other):
+    return id(self) != id(other)
+
+  def __gt__(self, other):
+    return JSBool(False)
+
+  def __lt__(self, other):
+    return JSBool(False)
+
+  def __ge__(self, other):
+    return self == other
+
+  def __le__(self, other):
+    return self == other
+
 
 class JSUndefined(JSObject):
   def __init__(self, *args, **kwargs):
@@ -58,6 +224,12 @@ class JSUndefined(JSObject):
   def __getitem__(self, name):
     raise TypeError("Cannot read property '{name}' of undefined")
 
+  def __str__(self):
+    return "undefined"
+  
+  def __bool__(self):
+    return False
+
 
 class JSBool(JSObject):
   def __init__(self, value, *args, **kwargs):
@@ -65,22 +237,747 @@ class JSBool(JSObject):
     # TODO do we need value casting here?
     self._value = value
 
+  def __str__(self):
+    return "true" if self._value else "false"
+
+  def __repr__(self):
+    return self.__str__()
+
+  def __str__(self):
+    return "[object Object]"
+
+  # Bool representation
+  
+  def __bool__(self):
+    return self._value
+
+  def __float__(self):
+    return 1.0 if self._value else 0.0
+
+  # Unary Operators
+
+  def __neg__(self):
+    return JSNaN()
+
+  def __pos__(self):
+    return JSNaN()
+
+  def __invert__(self):
+    return JSNumber(-1)
+
+  # Absolute value, in JSLand triggered via Math.abs
+
+  def __abs__(self):
+    return JSNaN()
+
+  # Binary Operators
+
+  def __add__(self, other):
+    return JSNumber(int(self._value)) + other
+
+  def __radd__(self, other):
+    return self + other
+
+  def __iadd__(self, other):
+    return self + other
+
+  def __sub__(self, other):
+    return JSNumber(int(self._value)) - other
+
+  def __rsub__(self, other):
+    return self - other
+
+  def __isub__(self, other):
+    return self - other
+
+  def __mul__(self, other):
+    return JSNumber(int(self._value)) * other
+
+  def __rmul__(self, other):
+    return self * other
+
+  def __imul__(self, other):
+    return self * other
+
+  def __truediv__(self, other):
+    return JSNumber(int(self._value)) / other
+
+  def __rtruediv__(self, other):
+    return self / other
+
+  def __itruediv__(self, other):
+    return self / other
+
+  # Javascript has no floor div
+
+  def __mod__(self, other):
+    return JSNumber(int(self._value)) % other
+
+  def __rmod__(self, other):
+    return self % other
+
+  def __imod__(self, other):
+    return self % other
+
+  def __pow__(self, other):
+    return JSNumber(int(self._value)) ** other
+
+  def __rpow__(self, other):
+    return self % other
+
+  def __ipow__(self, other):
+    return self % other
+
+  # Binary bitwise operators
+
+  def __and__(self, other):
+    return JSNumber(int(self._value)) & other
+
+  def __rand__(self, other):
+    return self & other
+
+  def __iand__(self, other):
+    return self & other
+
+  def __or__(self, other):
+    return JSNumber(int(self._value)) | other
+
+  def __ror__(self, other):
+    return self | other
+
+  def __ior__(self, other):
+    return self | other
+
+  def __xor__(self, other):
+    return JSNumber(int(self._value)) ^ other
+
+  def __rxor__(self, other):
+    return self ^ other
+
+  def __ixor__(self, other):
+    return self ^ other
+
+  def __lshift__(self, other):
+    return JSNumber(int(self._value)) << other
+
+  def __rlshift__(self, other):
+    return self << other
+
+  def __ilshift__(self, other):
+    return self << other
+
+  def __rshift__(self, other):
+    return JSNumber(int(self._value)) >> other
+
+  def __rrshift__(self, other):
+    return self >> other
+
+  def __irshift__(self, other):
+    return self >> other
+
+  # Binary logic operators
+
+  def __eq__(self, other):
+    return self._value == bool(other)
+
+  def __neq__(self, other):
+    return self._value != bool(other)
+
+  def __gt__(self, other):
+    return JSNumber(int(self._value)) > other
+
+  def __lt__(self, other):
+    return JSNumber(int(self._value)) < other
+
+  def __ge__(self, other):
+    return JSNumber(int(self._value)) >= other
+
+  def __le__(self, other):
+    return JSNumber(int(self._value)) <= other
+
 
 class JSNumber(JSObject):
   def __init__(self, value, *args, **kwargs):
     super().__init__(*args, **kwargs)
-    # TODO do we need value casting here?
-    self._value = value
+    # no casting is required here,
+    # other functions / transpiler should ensure value is valid here
+    self._value = float(value)
+
+  def __str__(self):
+    s = str(self._value)
+    if '.' in s:
+      s = s.rstrip("0").rstrip(".")
+    return s
+
+  def __float__(self):
+    return self._value
+
+  # Bool representation
+  
+  def __bool__(self):
+    return self._value != ""
+
+  # Unary Operators
+
+  def __neg__(self):
+    return JSNumber(-1)
+
+  def __pos__(self):
+    if bool(self):
+      return JSNaN()
+    return JSNumber(0)
+
+  def __invert__(self):
+    if bool(self):
+      return JSNaN()
+    return JSNumber(-0)
+
+  # Absolute value, in JSLand triggered via Math.abs
+
+  def __abs__(self):
+    return JSNaN()
+
+  # Binary Operators
+
+  def __add__(self, other):
+    if isinstance(other, JSString):
+      return str(self) + str(other)
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value + f)
+
+  def __radd__(self, other):
+    return self + other
+
+  def __iadd__(self, other):
+    if isinstance(other, JSString):
+      return str(self) + str(other)
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value += f
+    return self
+
+  def __sub__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value - f)
+
+  def __rsub__(self, other):
+    return self - other
+
+  def __isub__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value -= f
+    return self
+
+  def __mul__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value * f)
+
+  def __rmul__(self, other):
+    return self * other
+
+  def __imul__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value *= f
+    return self
+
+  def __truediv__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value / f)
+
+  def __rtruediv__(self, other):
+    return self / other
+
+  def __itruediv__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value /= f
+    return self
+
+  # Javascript has no floor div
+
+  def __mod__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value % f)
+
+  def __rmod__(self, other):
+    return self % other
+
+  def __imod__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value %= f
+    return self
+
+  def __pow__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value ** f)
+
+  def __rpow__(self, other):
+    return self % other
+
+  def __ipow__(self, other):
+    return self % other
+
+  # Binary bitwise operators
+
+  def __and__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value & f)
+
+  def __rand__(self, other):
+    return self & other
+
+  def __iand__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value &= f
+    return self
+
+  def __or__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value | f)
+
+  def __ror__(self, other):
+    return self | other
+
+  def __ior__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value |= f
+    return self
+
+  def __xor__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    return JSNumber(self._value ^ f)
+
+  def __rxor__(self, other):
+    return self ^ other
+
+  def __ixor__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return JSNaN()
+    self._value ^= f
+    return self
+
+  def __lshift__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return self
+    return JSNumber(self._value << f)
+
+  def __rlshift__(self, other):
+    return self << other
+
+  def __ilshift__(self, other):
+    f = float(other)
+    if not isinstance(f, JSNaN):
+      self._value <<= f
+    return self
+
+  def __rshift__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return self
+    return JSNumber(self._value >> f)
+
+  def __rrshift__(self, other):
+    return self >> other
+
+  def __irshift__(self, other):
+    f = float(other)
+    if not isinstance(f, JSNaN):
+      self._value >>= f
+    return self
+
+  # Binary logic operators
+
+  def __eq__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return False
+    return self._value == f
+
+  def __neq__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return True
+    return self._value != f
+
+  def __gt__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return False
+    return self._value > f
+
+  def __lt__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return False
+    return self._value < f
+
+  def __ge__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return False
+    return self._value >= f
+
+  def __le__(self, other):
+    f = float(other)
+    if isinstance(f, JSNaN):
+      return False
+    return self._value <= f
 
 
 class JSNaN(JSNumber):
   def __init__(self, *args, **kwargs):
     super().__init__(float('nan'), *args, **kwargs)
 
+  def __str__(self):
+    return "NaN"
+
+  def __float__(self):
+    return self
+
+  # Bool representation
+  
+  def __bool__(self):
+    return False
+
+  # Unary Operators
+
+  def __neg__(self):
+    return self
+
+  def __pos__(self):
+    return self
+
+  def __invert__(self):
+    return JSNumber(-1)
+
+  # Absolute value, in JSLand triggered via Math.abs
+
+  def __abs__(self):
+    return JSNaN()
+
+  # Binary Operators
+
+  def __add__(self, other):
+    if isinstance(other, JSString):
+      return str(self) + str(other)
+    return self
+
+  def __radd__(self, other):
+    return self + other
+
+  def __iadd__(self, other):
+    if isinstance(other, JSString):
+      return str(self) + str(other)
+    return self
+
+  def __sub__(self, other):
+    return self
+
+  def __rsub__(self, other):
+    return self - other
+
+  def __isub__(self, other):
+    return self
+
+  def __mul__(self, other):
+    return self
+
+  def __rmul__(self, other):
+    return self * other
+
+  def __imul__(self, other):
+    return self
+
+  def __truediv__(self, other):
+    return self
+
+  def __rtruediv__(self, other):
+    return self / other
+
+  def __itruediv__(self, other):
+    return self
+
+  # Javascript has no floor div
+
+  def __mod__(self, other):
+    return self
+
+  def __rmod__(self, other):
+    return self % other
+
+  def __imod__(self, other):
+    return self
+
+  def __pow__(self, other):
+    return self
+
+  def __rpow__(self, other):
+    return self % other
+
+  def __ipow__(self, other):
+    return self % other
+
+  # Binary bitwise operators
+
+  def __and__(self, other):
+    return JSNumber(0) & other
+
+  def __rand__(self, other):
+    return self & other
+
+  def __iand__(self, other):
+    return self & other
+
+  def __or__(self, other):
+    return JSNumber(0) | other
+
+  def __ror__(self, other):
+    return self | other
+
+  def __ior__(self, other):
+    return self | other
+
+  def __xor__(self, other):
+    return JSNumber(0) ^ other
+
+  def __rxor__(self, other):
+    return self ^ other
+
+  def __ixor__(self, other):
+    return self ^ other
+
+  def __lshift__(self, other):
+    return JSNumber(0) << other
+
+  def __rlshift__(self, other):
+    return self << other
+
+  def __ilshift__(self, other):
+    return self << other
+
+  def __rshift__(self, other):
+    return JSNumber(0) >> other
+
+  def __rrshift__(self, other):
+    return self >> other
+
+  def __irshift__(self, other):
+    return self >> other
+
+  # Binary logic operators
+
+  def __eq__(self, other):
+      return False
+
+  def __neq__(self, other):
+    return True
+
+  def __gt__(self, other):
+      return False
+
+  def __lt__(self, other):
+      return False
+
+  def __ge__(self, other):
+    return self == other or self > other
+
+  def __le__(self, other):
+    return self == other or self < other
+
 
 class JSInfinity(JSNumber):
   def __init__(self, *args, **kwargs):
     super().__init__(float('+Inf'), *args, **kwargs)
+
+  def __str__(self):
+    return "Infinity" if self._value == float("+Inf") else "-Infinity"
+
+  def __float__(self):
+    return self
+
+  # Bool representation
+  
+  def __bool__(self):
+    return False
+
+  # Unary Operators
+
+  def __neg__(self):
+    r = JSInfinity()
+    r._value = -self._value
+    return r
+
+  def __pos__(self):
+    return self
+
+  def __invert__(self):
+    return JSNumber(-1)
+
+  # Absolute value, in JSLand triggered via Math.abs
+
+  def __abs__(self):
+    return self
+
+  # Binary Operators
+
+  def __add__(self, other):
+    if isinstance(other, JSString):
+      return str(self) + str(other)
+    return self
+
+  def __radd__(self, other):
+    return self + other
+
+  def __iadd__(self, other):
+    if isinstance(other, JSString):
+      return str(self) + str(other)
+    return self
+
+  def __sub__(self, other):
+    return JSNaN()
+
+  def __rsub__(self, other):
+    return self - other
+
+  def __isub__(self, other):
+    return JSNaN()
+
+  def __mul__(self, other):
+    return self
+
+  def __rmul__(self, other):
+    return self * other
+
+  def __imul__(self, other):
+    return self
+
+  def __truediv__(self, other):
+    return self
+
+  def __rtruediv__(self, other):
+    return self / other
+
+  def __itruediv__(self, other):
+    return self
+
+  # Javascript has no floor div
+
+  def __mod__(self, other):
+    return self
+
+  def __rmod__(self, other):
+    return self % other
+
+  def __imod__(self, other):
+    return self
+
+  def __pow__(self, other):
+    return self
+
+  def __rpow__(self, other):
+    return self % other
+
+  def __ipow__(self, other):
+    return self % other
+
+  # Binary bitwise operators
+
+  def __and__(self, other):
+    return JSNumber(0) & other
+
+  def __rand__(self, other):
+    return self & other
+
+  def __iand__(self, other):
+    return self & other
+
+  def __or__(self, other):
+    return JSNumber(0) | other
+
+  def __ror__(self, other):
+    return self | other
+
+  def __ior__(self, other):
+    return self | other
+
+  def __xor__(self, other):
+    return JSNumber(0) ^ other
+
+  def __rxor__(self, other):
+    return self ^ other
+
+  def __ixor__(self, other):
+    return self ^ other
+
+  def __lshift__(self, other):
+    return JSNumber(0) << other
+
+  def __rlshift__(self, other):
+    return self << other
+
+  def __ilshift__(self, other):
+    return self << other
+
+  def __rshift__(self, other):
+    return JSNumber(0) >> other
+
+  def __rrshift__(self, other):
+    return self >> other
+
+  def __irshift__(self, other):
+    return self >> other
+
+  # Binary logic operators
+
+  def __eq__(self, other):
+      return False
+
+  def __neq__(self, other):
+    return True
+
+  def __gt__(self, other):
+      return False
+
+  def __lt__(self, other):
+      return False
+
+  def __ge__(self, other):
+    return self == other or self > other
+
+  def __le__(self, other):
+    return self == other or self < other
 
 
 class JSString(JSObject):
@@ -88,6 +985,15 @@ class JSString(JSObject):
     super().__init__(*args, **kwargs)
     # TODO do we need value casting here?
     self._value = value
+
+  def __str__(self):
+    return self._value
+
+  def __bool__(self):
+    return self._value != ""
+
+  def __float__(self):
+    return JSNaN() if self._value == "" else JSNumber(0)
 
 
 class JSArray(JSObject):
@@ -130,6 +1036,8 @@ class JSArray(JSObject):
   def __add__(self, value):
     return self._values.__add__(value)
 
+  def __str__(self):
+    return ",".join(str(value) for value in self._values)
 
 
 class JSFunction(JSObject):
@@ -140,15 +1048,21 @@ class JSFunction(JSObject):
   something like `__lambda_DE09030AEF` :) Ugly but it should work with our current setup.
   """
 
-  def __init__(self, fn, parameters=None, *args, owner=None, **kwargs):
+  def __init__(self, fn, parameters=None, *args, owner=None, repr=None, **kwargs):
     super().__init__(*args, **kwargs)
     self._fn = fn
     self._parameters = parameters or []
     self._owner = owner
+    self._repr = repr
 
   def call(self, scope, *args):
     fn_scope = FunctionScope(scope, self._parameters, args, owner=self._owner)
     return self._fn(fn_scope)
+
+  def __str__(self):
+    if self._repr:
+      return self._repr
+    return "function {self._ref if self._ref else ''}() {{ [native code] }}"
 
 
 ###############################################

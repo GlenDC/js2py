@@ -115,42 +115,6 @@ class PyCodeGen {
     let leftCode = left;
     let rightCode = right;
 
-    // some corrections based on the operator,
-    // I have a feeling we might need to refactor this out eventually,
-    // as it could become very hairy and long
-    switch (node.operator) {
-      case "+":
-        // TODO: will need more complicated logic eventually,
-        // to also take into account anything that would evaluate to...
-        if (
-          (leftCode instanceof LiteralString ||
-            leftCode instanceof TemplateExpression) &&
-          rightCode instanceof LiteralNumeric
-        ) {
-          rightCode = new CallExpression(new Identifier("str"), rightCode);
-        } else if (
-          leftCode instanceof LiteralNumeric &&
-          (rightCode instanceof LiteralString ||
-            rightCode instanceof TemplateExpression)
-        ) {
-          leftCode = new CallExpression(new Identifier("str"), leftCode);
-        }
-      case "-":
-        if (
-          (leftCode instanceof LiteralString ||
-            leftCode instanceof TemplateExpression) &&
-          rightCode instanceof LiteralNumeric
-        ) {
-          return PyNaN;
-        } else if (
-          leftCode instanceof LiteralNumeric &&
-          (rightCode instanceof LiteralString ||
-            rightCode instanceof TemplateExpression)
-        ) {
-          return PyNaN;
-        }
-    }
-
     let isRightAssociative = node.operator === "**";
     if (
       GetPrecedence(node.left) < GetPrecedence(node) ||

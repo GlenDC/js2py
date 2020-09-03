@@ -184,9 +184,16 @@ class Identifier extends StringToken {}
 
 class Keyword extends StringToken {}
 
-class LiteralBoolean extends StringToken {
+class LiteralBoolean extends Token {
   constructor(value) {
-    super(value ? "True" : "False");
+    super();
+    this.value = value ? "True" : "False";
+  }
+
+  emit(ts, opts) {
+    // TODO: get constructor from scope
+    // TODO: call constructor (static from type) instead of using `()` implicitly
+    ts.put(`JSBool(${this.value})`, opts);
   }
 }
 
@@ -197,8 +204,32 @@ class LiteralNumeric extends Token {
   }
 
   emit(ts, opts) {
-    ts.putNumber(this.x, opts);
+    // TODO: get constructor from scope
+    // TODO: call constructor (static from type) instead of using `()` implicitly
+    ts.put(`JSNumber(${renderNumber(this.x)})`, opts);
   }
+}
+
+function renderNumber(n) {
+  let s;
+  if (n >= 1e3 && n % 10 === 0) {
+    s = n.toString(10);
+    if (/[eE]/.test(s)) {
+      return s.replace(/[eE]\+/, "e");
+    }
+    return n.toString(10).replace(/0{3,}$/, (match) => {
+      return "e" + match.length;
+    });
+  } else if (n % 1 === 0) {
+    if (n > 1e15 && n < 1e20) {
+      return "0x" + n.toString(16).toUpperCase();
+    }
+    return n.toString(10).replace(/[eE]\+/, "e");
+  }
+  return n
+    .toString(10)
+    .replace(/^0\./, ".")
+    .replace(/[eE]\+/, "e");
 }
 
 class LiteralString extends Token {
@@ -210,6 +241,9 @@ class LiteralString extends Token {
   }
 
   emit(ts, opts) {
+    // TODO: get constructor from scope
+    // TODO: call constructor (static from type) instead of using `()` implicitly
+    ts.put(`JSString(`), opts;
     if (this.isRaw) {
       ts.put("r", opts);
     }
@@ -221,6 +255,7 @@ class LiteralString extends Token {
       })
     );
     ts.put(this.delim, opts);
+    ts.put(`)`, opts);
   }
 }
 
@@ -593,8 +628,11 @@ class IfExpression extends Token {
   constructor(test, consequent, alternate) {
     super();
     this.test = test;
-    this.consequent = consequent;
+    this.consequent = consequent instanceof Block ? consequent : new Block([consequent]);
     this.alternate = alternate;
+    if (alternate && !(this.alternate instanceof IfExpression) && !(this.alternate instanceof IfExpression)) {
+      this.alternate = new Block([this.alternate]);
+    }
   }
 
   emit(ts, opts) {
@@ -667,15 +705,19 @@ class TODO extends Token {
 }
 
 const PyNaN = new CallExpression(
-  new Identifier("float"),
-  new LiteralString("nan")
+  // TODO: use and get constructed object from (global) scope
+  new Identifier("JSNaN"),
 );
 const PyInf = new CallExpression(
-  new Identifier("float"),
-  new LiteralString("+Inf")
+  // TODO: use and get constructed object from (global) scope
+  // TODO: support negated Infinity
+  new Identifier("JSInfinity"),
 );
 
-const PyNone = new Identifier("None");
+  // TODO: use and get constructed object from (global) scope
+const PyNone = new CallExpression(
+  new Identifier("JSUndefined"),
+);
 
 const PyEmpty = new RawToken("");
 

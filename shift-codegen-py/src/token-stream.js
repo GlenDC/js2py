@@ -15,11 +15,6 @@ class TokenStream {
     this.result += tokenStr;
   }
 
-  putNumber(number, opts) {
-    const tokenStr = renderNumber(number);
-    this.put(tokenStr, opts);
-  }
-
   putIndention(opts = {}) {
     const { lineIndention } = opts;
     if (lineIndention && lineIndention > 0) {
@@ -30,28 +25,6 @@ class TokenStream {
   putEOL(opts) {
     this.put(this.newLineStr, opts);
   }
-}
-
-function renderNumber(n) {
-  let s;
-  if (n >= 1e3 && n % 10 === 0) {
-    s = n.toString(10);
-    if (/[eE]/.test(s)) {
-      return s.replace(/[eE]\+/, "e");
-    }
-    return n.toString(10).replace(/0{3,}$/, (match) => {
-      return "e" + match.length;
-    });
-  } else if (n % 1 === 0) {
-    if (n > 1e15 && n < 1e20) {
-      return "0x" + n.toString(16).toUpperCase();
-    }
-    return n.toString(10).replace(/[eE]\+/, "e");
-  }
-  return n
-    .toString(10)
-    .replace(/^0\./, ".")
-    .replace(/[eE]\+/, "e");
 }
 
 module.exports = {
