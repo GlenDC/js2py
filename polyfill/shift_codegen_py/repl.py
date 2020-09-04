@@ -165,7 +165,12 @@ def run_repl():
       line, history_offset = repl.cmd_at(history_offset+1)
       reset_prompt(line)
       continue
-    # TODO: support left/right arrows one day if I feel like it, bleh
+    elif c in ['\x1b[C', '\x1b[D']:
+      # ignore left/right arrows for now,
+      # they would behave unexpected in the current codebase anyhow,
+      # and I do not have the energy to fix this properly for now,
+      # sorry, feel free to fix it and open an MR for me if you care
+      continue
     else:  # regular stdin
       if c == '\r':
         if line is None:
@@ -208,6 +213,12 @@ def run_repl():
               reset_prompt(line)
               to_start = True
               break
+            elif c in ['\x1b[C', '\x1b[D']:
+              # ignore left/right arrows for now,
+              # they would behave unexpected in the current codebase anyhow,
+              # and I do not have the energy to fix this properly for now,
+              # sorry, feel free to fix it and open an MR for me if you care
+              continue
             else:
               write_stdout(str(c))
               line += str(c)
