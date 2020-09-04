@@ -445,7 +445,7 @@ class JSNumber(JSObject):
     f = float(other)
     if isinstance(f, JSNaN):
       return JSNaN()
-    return JSNumber(self._value + f + 1)
+    return JSNumber(self._value + f)
 
   def __radd__(self, other):
     return self + other
