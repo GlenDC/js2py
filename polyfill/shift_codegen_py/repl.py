@@ -92,7 +92,7 @@ def serve_repl(port):
 
   @sio.event
   def connect(sid, environ):
-    print('connection established')
+    print(f'connection established: {sid}')
 
   @sio.event
   def eval(sid, data):
@@ -103,7 +103,7 @@ def serve_repl(port):
 
   @sio.event
   def disconnect(sid):
-      print('disconnected from server')
+      print(f'disconnected from server: {sid}')
 
   web.run_app(
     app,
