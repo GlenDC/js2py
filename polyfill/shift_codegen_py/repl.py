@@ -25,6 +25,8 @@ class REPL:
     # NOTE: replace _user_cmds with file if
     # we ever turn out to use too much memory by storing the cmds history in memory
     self._user_cmds = [
+      # NOTE: implicitly relies on the fact that shift-codegen_py is installed
+      # in a linked modus operandes
       "from shift_codegen_py.polyfill import *", # required first command
     ]
     self._user_cmds_start_index = 1
