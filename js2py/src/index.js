@@ -41,6 +41,13 @@ const argDefinitions = [
     name: "--tl-comment",
   },
   {
+    description:
+      "print the required imports in order to be able to run the output script (option available in non REPL mode only)",
+    type: Boolean,
+    name: "--include-import",
+    shorthand: "-i",
+  },
+  {
     description: "show the version of your installed js2py version",
     type: Boolean,
     name: "--version",
@@ -66,7 +73,8 @@ const argDefinitions = [
     name: "--eval-server",
   },
   {
-    description: "opt-in filepath to be used such that all STDOUT displayed is written to the given file path instead of the STDOUT. In REPL mode it is however still displayed in the STDOUT as well",
+    description:
+      "opt-in filepath to be used such that all STDOUT displayed is written to the given file path instead of the STDOUT. In REPL mode it is however still displayed in the STDOUT as well",
     type: String,
     name: "--output",
     shorthand: "-o",
@@ -124,10 +132,18 @@ if (args["--version"]) {
   exit(0);
 }
 
+// imports to be made in order to be able to execute the generated python code,
+// which includes all the logic you need in order to emulate the Javascript
+// runtime within the Python runtime, mimicking Javascript's behavior in a Pythonic fashion.
+const requiredOutputScriptImports = `from shift_codegen_py.polyfill import *${os.EOL}`;
+
 function transpileAndExit(input) {
-  const output = transpile(input, {
+  let output = transpile(input, {
     topLevelComment: !!args["--tl-comment"],
   });
+  if (args["--include-import"]) {
+    output = requiredOutputScriptImports + os.EOL + output;
+  }
   const filePath = args["--output"];
   if (filePath) {
     fs.writeFileSync(filePath, output);
@@ -143,21 +159,28 @@ if (args._.length > 0) {
 }
 
 // used for an interactive REPL session
-function startREPL() {  
+function startREPL() {
   const outputPath = args["--output"];
   let printFn = (content) => console.log(content);
   let fileLogger;
   if (outputPath) {
     // also write stdout to a file
     const ws = fs.createWriteStream(outputPath);
-    [`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`].forEach((eventType) => {
+    [
+      `exit`,
+      `SIGINT`,
+      `SIGUSR1`,
+      `SIGUSR2`,
+      `uncaughtException`,
+      `SIGTERM`,
+    ].forEach((eventType) => {
       process.on(eventType, () => {
         ws.close();
       });
     });
     fileLogger = (content) => {
       ws.write(content);
-    }
+    };
     printFn = (content) => {
       console.log(content);
       fileLogger(content);
@@ -193,9 +216,9 @@ function startREPL() {
         if (!error && fileLogger) {
           let lines = cmd.trim().split(os.EOL);
           fileLogger(`>>> ${lines[0]}${os.EOL}`);
-          lines.slice(1).forEach(line => {
+          lines.slice(1).forEach((line) => {
             fileLogger(`... ${line}${os.EOL}`);
-          })
+          });
         }
         callback(error, output);
       });
@@ -265,7 +288,14 @@ fs.fstat(0, function (err, stats) {
   const filePath = args["--output"];
   if (filePath) {
     const ws = fs.createWriteStream(filePath);
-    [`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`].forEach((eventType) => {
+    [
+      `exit`,
+      `SIGINT`,
+      `SIGUSR1`,
+      `SIGUSR2`,
+      `uncaughtException`,
+      `SIGTERM`,
+    ].forEach((eventType) => {
       process.on(eventType, () => {
         ws.close();
       });
@@ -273,7 +303,12 @@ fs.fstat(0, function (err, stats) {
     writeResult = (content) => {
       ws.write(content);
       ws.write(os.EOL);
-    }
+    };
+  }
+
+  // print the required imports
+  if (args["--include-import"]) {
+    writeResult(requiredOutputScriptImports);
   }
 
   // try to parse as quickly as possible,

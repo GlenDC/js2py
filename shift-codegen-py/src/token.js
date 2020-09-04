@@ -628,9 +628,14 @@ class IfExpression extends Token {
   constructor(test, consequent, alternate) {
     super();
     this.test = test;
-    this.consequent = consequent instanceof Block ? consequent : new Block([consequent]);
+    this.consequent =
+      consequent instanceof Block ? consequent : new Block([consequent]);
     this.alternate = alternate;
-    if (alternate && !(this.alternate instanceof IfExpression) && !(this.alternate instanceof IfExpression)) {
+    if (
+      alternate &&
+      !(this.alternate instanceof IfExpression) &&
+      !(this.alternate instanceof IfExpression)
+    ) {
       this.alternate = new Block([this.alternate]);
     }
   }
@@ -706,18 +711,16 @@ class TODO extends Token {
 
 const PyNaN = new CallExpression(
   // TODO: use and get constructed object from (global) scope
-  new Identifier("JSNaN"),
+  new Identifier("JSNaN")
 );
 const PyInf = new CallExpression(
   // TODO: use and get constructed object from (global) scope
   // TODO: support negated Infinity
-  new Identifier("JSInfinity"),
+  new Identifier("JSInfinity")
 );
 
-  // TODO: use and get constructed object from (global) scope
-const PyNone = new CallExpression(
-  new Identifier("JSUndefined"),
-);
+// TODO: use and get constructed object from (global) scope
+const PyNone = new CallExpression(new Identifier("JSUndefined"));
 
 const PyEmpty = new RawToken("");
 
