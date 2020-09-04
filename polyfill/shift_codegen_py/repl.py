@@ -179,12 +179,40 @@ def run_repl():
           line = line[:len(line)-1]
         continue  # and now the next char please...
       else:
-        line = str(c)
+        line = (line or "" ) + str(c)
+        clear_stdout_line(flush=False)
+        write_stdout(f"{prompt} ", flush=False)  # prompt
         write_stdout(line)
         # ^ write captured char
         try:
-          user_line = sys.stdin.readline()
-          line = (line or "" ) + user_line  # to also include first char if defined
+          # we do not wish to use sys.stdin.readline()
+          # as that can capture our special back-keys :(
+          to_start = False
+          while True:
+            c = click.getchar()
+            if c == '\r':
+              write_stdout('\n')
+              line += '\n'
+              break
+            if c in ['\b', '\x7f']:
+              if line:
+                clear_last_char()
+                line = line[:len(line)-1]
+            elif c == '\x1b[A':  # up arrow
+              line, history_offset = repl.cmd_at(history_offset-1)
+              reset_prompt(line)
+              to_start = True
+              break
+            elif c == '\x1b[B':  # down arrow
+              line, history_offset = repl.cmd_at(history_offset+1)
+              reset_prompt(line)
+              to_start = True
+              break
+            else:
+              write_stdout(str(c))
+              line += str(c)
+          if to_start:
+            continue
         except KeyboardInterrupt:
           # reset, life-saver
           clear_stdout_line(flush=False)

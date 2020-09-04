@@ -50,8 +50,24 @@ class JSObject(object):
     except KeyError:
       pass
 
-  def call(self, *args):
+  # function call
+
+  def __call__(self, *args):
     raise TypeError(f"{self._ref} is not a function")
+
+  # ++ / -- support
+
+  def inc(self):
+    raise SyntaxError("Invalid left-hand side expression in prefix operation")
+
+  def pinc(self):
+    raise SyntaxError("Invalid left-hand side expression in postfix operation")
+
+  def dec(self):
+    raise SyntaxError("Invalid left-hand side expression in prefix operation")
+
+  def pdec(self):
+    raise SyntaxError("Invalid left-hand side expression in postfix operation")
 
   # Str representation,
   # important when for example adding with a string
@@ -456,6 +472,26 @@ class JSNumber(JSObject):
     if bool(self):
       return JSNaN()
     return JSNumber(-0)
+
+  # ++ / -- support
+
+  def inc(self):
+    self._value += 1
+    return self
+
+  def pinc(self):
+    value = self._value
+    self._value += 1
+    return JSNumber(value)
+
+  def dec(self):
+    self._value -= 1
+    return self
+
+  def pdec(self):
+    value = self._value
+    self._value -= 1
+    return JSNumber(value)
 
   # Absolute value, in JSLand triggered via Math.abs
 
@@ -1080,7 +1116,7 @@ class JSFunction(JSObject):
     self._owner = owner
     self._repr = repr
 
-  def call(self, scope, *args):
+  def __call__(self, scope, *args):
     fn_scope = FunctionScope(scope, self._parameters, args, owner=self._owner)
     return self._fn(fn_scope)
 
