@@ -91,7 +91,9 @@ class JSObject(object):
   # Binary Operators
 
   def __add__(self, other):
-    return str(self) + str(other)
+    if isinstance(self, JSString) or isinstance(other, JSString):
+      return JSString(str(self) + str(other))
+    return JSNumber(float(self) + float(other))
 
   def __radd__(self, other):
     return self + other
@@ -229,6 +231,29 @@ class JSUndefined(JSObject):
   
   def __bool__(self):
     return False
+  
+  def __float__(self):
+    return 0.0
+
+
+class JSNull(JSObject):
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+
+  def __setitem__(self, name, value):
+    raise TypeError("Cannot set property '{name}' of undefined")
+
+  def __getitem__(self, name):
+    raise TypeError("Cannot read property '{name}' of undefined")
+
+  def __str__(self):
+    return "null"
+  
+  def __bool__(self):
+    return False
+  
+  def __float__(self):
+    return 0.0
 
 
 class JSBool(JSObject):
@@ -1090,9 +1115,28 @@ class Scope(object):
   __REF_KIND_LET = 2
   __REF_KIND_CONST = 3
 
+  __REF_KIND_RESERVED = 40
+  __REF_KIND_MAGIC = 42  # magical builtin behavior, be amazed or scared, choose wisely
+
   def __init__(self, parent_scope=None):
     self._parent_scope = parent_scope
     self._refs = {}
+
+  def _declare_reserved(self, name, value):
+    """
+    used internally (in child Global class) only
+    """
+    if name in self._refs:
+      raise RuntimeError(f"{name} is already declared")
+    self._refs[name] = [self.__REF_KIND_RESERVED, value]
+
+  def _declare_magic(self, name, value):
+    """
+    used internally (in child Global class) only
+    """
+    if name in self._refs:
+      raise RuntimeError(f"{name} is already declared")
+    self._refs[name] = [self.__REF_KIND_MAGIC, value]
 
   def assign(self, name, value):
     """
@@ -1101,12 +1145,28 @@ class Scope(object):
     implicitly be declared as if it were a `var`-scoped value.
     """
     try:
-      return self._refs[name][1]
+      p = self._refs[name]
+      if p[0] == self.__REF_KIND_MAGIC:
+        return value  # do not actually assign here, magic is going on, ssht
+      if p[0] == self.__REF_KIND_CONST:
+        raise TypeError("Assignment to constant variable.")  # nope, not going to happen
+      if p[0] == self.__REF_KIND_RESERVED:
+        # should have been caught by Transpiler though, but ok, let's handle it gracefully anyhow
+        raise SyntaxError("Invalid left-hand side in assignment")
+      p[1] = value  # actual assignment, e.g.: let, var or param
+      return value
     except KeyError:
       # declare implicitly as a var, within the current scope
       self.declare_var(name, value)
+      return value
 
-  def lookup(self, name):
+  def __setitem__(self, name, value):
+    # easy shortcut for self.assign,
+    # reason self.assign exists is because in JS assignment is an expression,
+    # returning the right-hand side...
+    self.assign(name, value)
+
+  def __getitem__(self, name):
     """
     Return the value using the name as reference,
     None is returned in case no value could be found for
@@ -1115,15 +1175,27 @@ class Scope(object):
     try:
       return self._refs[name][1]
     except KeyError:
-      return None if self._parent_scope is None else self._parent_scope.lookup(name)
+      try:
+        # easier to ask forgiveness than it is to ask for permission
+        return self._parent_scope[name]
+      except TypeError:  # NoneType is not subscriptable...
+       return JSUndefined()
 
   def declare_var(self, name, value):
     """
     Declare the value as a var, overwriting the reference if it
     already existed before.
     """
-    stored_kind_value_pair = self.lookup(name)
+    stored_kind_value_pair = self[name]
     if stored_kind_value_pair:
+      # magic vars require magical behavior, plish plash
+      if stored_kind_value_pair[0] == self.__REF_KIND_MAGIC:
+        # do nothing, but make it look like the user did do something, empowered already?
+        return JSUndefined()
+      # builtins are not to be altered, oh no
+      if stored_kind_value_pair[0] == self.__REF_KIND_RESERVED:
+        # should have been caught by Transpiler though, but ok, let's handle it gracefully anyhow
+        raise SyntaxError(f"Unexpected token '{name}'")
       # we cannot check if it isn't a `var`, as we also would like this to work with `__REF_KIND_PARAM` :)
       if stored_kind_value_pair[0] in [self.__REF_KIND_LET, self.__REF_KIND_CONST]:
         raise SyntaxError(f"Identifier '{name}' has already been declared")
@@ -1131,6 +1203,7 @@ class Scope(object):
       stored_kind_value_pair[1] = value
     else:
       self._refs[name] = [self.__REF_KIND_VAR, value]
+    return JSUndefined()
 
   def declare_let(self, name, value):
     """
@@ -1139,6 +1212,7 @@ class Scope(object):
     if self.__exists(name):
       raise SyntaxError(f"Identifier '{name}' has already been declared")
     self._refs[name] = [self.__REF_KIND_LET, value]
+    return JSUndefined()
 
   def declare_const(self, name, value):
     """
@@ -1147,6 +1221,7 @@ class Scope(object):
     if self.__exists(name):
       raise SyntaxError(f"Identifier '{name}' has already been declared")
     self._refs[name] = [self.__REF_KIND_CONST, value]
+    return JSUndefined()
 
   def __exists(self, name):
     """
@@ -1154,7 +1229,11 @@ class Scope(object):
     only to be used within the internal API
     """
     try:
-      self._refs[name]
+      p = self._refs[name]
+      # throw an exception if we try to create let or const using a builtin name
+      if p[0] == self.__REF_KIND_RESERVED:
+        # should have been caught by Transpiler though, but ok, let's handle it gracefully anyhow
+        raise SyntaxError(f"Unexpected token '{name}'")
       return True
     except KeyError:
       return False if self._parent_scope is None else self._parent_scope.exists(name)

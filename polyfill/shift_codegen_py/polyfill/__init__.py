@@ -5,5 +5,11 @@ from .errors import *
 from .runtime import *
 
 # Objects expected that they might as well be built-in,
-# such as console and window. Also defines the GlobalScope type.
+# such as console and window.
 from .std import *
+
+# Global Scope Object
+from .globals import *
+
+# create global scope already
+scope = GlobalScope()

@@ -1,8 +1,6 @@
 """
 Polyfills standard Javascript objects used in browsers,
 such as console and window.
-
-Also defines the GlobalScope object.
 """
 
 import warnings
@@ -31,15 +29,3 @@ class JSConsole(JSObject):
 
   def __error(self, scope):
     print(*scope.arguments, file=sys.stderr)
-
-
-###############################################
-####### Global Scope
-###############################################
-
-class GlobalScope(Scope):
-  def __init__(self):
-    super().__init__()
-
-    # define console object
-    self.declare_var('console', JSConsole())
