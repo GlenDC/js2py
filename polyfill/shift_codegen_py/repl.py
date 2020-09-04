@@ -32,6 +32,7 @@ class REPL:
     self._user_cmds_start_index = 1
     self._repl = self._repl_new()
     self._polyfill_src_mtime_latest = 0
+    self._polyfill_src_mtime_latest = self._polyfill_src_mtime()
 
   def eval(self, cmd):
     self._reload_if_needed()
@@ -54,14 +55,17 @@ class REPL:
     elif index >= 0:
       return None, 0  # the future is not the history
     
-    return cmds[index].strip(), offset
+    return cmds[index].rstrip(), offset
 
   def _persist_user_cmd(self, cmd):
     if not cmd:
       return  # do not persist empties
-    if self._user_cmds[-1].strip() == cmd.strip():
-      return  # do not persist duplicates
-    self._user_cmds.append(cmd)
+    for line in cmd.splitlines():
+      if not line:
+        continue  # do not persist empties
+      if self._user_cmds[-1].strip() == line.strip():
+        continue  # do not persist duplicates
+      self._user_cmds.append(line)
 
   def _reload_if_needed(self):
     mtime = self._polyfill_src_mtime()
@@ -73,11 +77,13 @@ class REPL:
     self._polyfill_src_mtime_latest = mtime
 
   def _polyfill_src_mtime(self):
+    out_mtime = self._polyfill_src_mtime_latest
     for polyfill_py_path in glob.glob(self._PY_PATH_GOB):
       mtime = os.path.getmtime(polyfill_py_path)
-      if mtime > self._polyfill_src_mtime_latest:
-        return mtime
-    return self._polyfill_src_mtime_latest
+      if mtime > out_mtime:
+        out_mtime = mtime
+    # return most late time
+    return out_mtime
 
   def _repl_new(self):
     repl = replwrap.python()
@@ -151,6 +157,8 @@ def run_repl():
     try:
       c = click.getchar()
     except EOFError:
+      print()
+      print("Bye!")
       exit(0)
     except KeyboardInterrupt:
       # reset, life-saver
@@ -158,12 +166,34 @@ def run_repl():
       clear_env()
       continue
     if c == '\x1b[A':  # up arrow
-      line, history_offset = repl.cmd_at(history_offset-1)
-      reset_prompt(line)
+      current_line, history_offset = repl.cmd_at(history_offset-1)
+      reset_prompt(current_line)
+      if line:
+        if line.endswith('\r\n'):
+          line += ' '
+        lines = line.splitlines()
+        if current_line:
+          lines[-1] = current_line
+        else:
+          lines.pop()
+        line = '\r\n'.join(lines)
+      else:
+        line = current_line
       continue
     elif c == '\x1b[B':  # down arrow
-      line, history_offset = repl.cmd_at(history_offset+1)
-      reset_prompt(line)
+      current_line, history_offset = repl.cmd_at(history_offset+1)
+      reset_prompt(current_line)
+      if line:
+        if line.endswith('\r\n'):
+          line += ' '
+        lines = line.splitlines()
+        if current_line:
+          lines[-1] = current_line
+        else:
+          lines.pop()
+        line = '\r\n'.join(lines)
+      else:
+        line = current_line
       continue
     elif c in ['\x1b[C', '\x1b[D']:
       # ignore left/right arrows for now,
@@ -177,17 +207,16 @@ def run_repl():
           clear_stdout_line(flush=False)
           clear_env()
           continue  # restart
-        print()  # EOL
+        write_stdout('\r\n')
+        line += '\r\n'
       elif c in ['\b', '\x7f']:
-        if line:
+        if line and line[-1] != '\n':
           clear_last_char()
           line = line[:len(line)-1]
         continue  # and now the next char please...
       else:
         line = (line or "" ) + str(c)
-        clear_stdout_line(flush=False)
-        write_stdout(f"{prompt} ", flush=False)  # prompt
-        write_stdout(line)
+        write_stdout(str(c))
         # ^ write captured char
         try:
           # we do not wish to use sys.stdin.readline()
@@ -196,21 +225,44 @@ def run_repl():
           while True:
             c = click.getchar()
             if c == '\r':
-              write_stdout('\n')
-              line += '\n'
+              write_stdout('\r\n')
+              line += '\r\n'
               break
             if c in ['\b', '\x7f']:
-              if line:
+              if line and line[-1] != '\n':
                 clear_last_char()
                 line = line[:len(line)-1]
-            elif c == '\x1b[A':  # up arrow
-              line, history_offset = repl.cmd_at(history_offset-1)
-              reset_prompt(line)
+            elif c == '\x1b[A':  # up arrow, disabled in multiline mode
+              current_line, history_offset = repl.cmd_at(history_offset-1)
+              reset_prompt(current_line)
+              if line:
+                if line.endswith('\r\n'):
+                  line += ' '
+                lines = line.splitlines()
+                if current_line:
+                  lines[-1] = current_line
+                else:
+                  lines.pop()
+                line = '\r\n'.join(lines)
+              else:
+                line = current_line
               to_start = True
               break
-            elif c == '\x1b[B':  # down arrow
-              line, history_offset = repl.cmd_at(history_offset+1)
-              reset_prompt(line)
+            elif c == '\x1b[B':  # down arrow, disabled in multiline mode
+              current_line, history_offset = repl.cmd_at(history_offset+1)
+              reset_prompt(current_line)
+              if line:
+                if line.endswith('\r\n'):
+                  line += ' '
+                lines = line.splitlines()
+                if current_line:
+                  lines[-1] = current_line
+                else:
+                  lines.pop()
+                line = '\r\n'.join(lines)
+              else:
+                line = current_line
+              continue
               to_start = True
               break
             elif c in ['\x1b[C', '\x1b[D']:
@@ -232,14 +284,32 @@ def run_repl():
         if not line:
           line = None
           continue  # simply continue
+    slines = line.splitlines()
+    if len(slines) > 1 and slines[-1] != '':
+      # multiline input requires 2 new lines, one to confirm
+      write_stdout(f"{prompt} ")
+      continue
     try:
-      output = repl.eval(line)
+      try:
+        output = repl.eval(line)
+      except ValueError as e:
+        if 'Continuation prompt found' in str(e):
+          # ignore expected multiline-line related error
+          output = ''
+        else:
+          raise e
       if output:
+        if output.splitlines()[-1].startswith('IndentationError:'):
+          prompt = "..."
+          write_stdout(f"{prompt} ")
+          history_offset = 0  # reset
+          continue
         print(output.strip())
       # clear env
       clear_env()
     except Exception as e:
-      return str(e)
+      print(e)
+      exit(1)
 
 if __name__ == "__main__":
   args = sys.argv[1:]
