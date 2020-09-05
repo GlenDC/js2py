@@ -48,7 +48,7 @@ const { default: codeGen, FormattedCodeGen } = require("shift-codegen");
 const { version: projectVersion } = require("../package.json");
 
 class PyCodeGen {
-  constructor({ topLevelComment } = {}) {
+  constructor({ topLevelComment, includeImports } = {}) {
     this.ignoreConsoleCalls = true; // hardcoded for now, would require polyfill if desired
 
     // a top level comment to indicate we generated it,
@@ -57,7 +57,10 @@ class PyCodeGen {
     this.topLevelComment = !!topLevelComment;
 
     // used for top-level std imports (e.g. re)
+    // TODO: delete, should no longer be needed
     this.importedModules = new Set();
+
+    this.includeImports = !!includeImports;
   }
 
   // parenToAvoidBeingDirective(element, original) {
@@ -448,6 +451,15 @@ class PyCodeGen {
     }
 
     const importStatements = [];
+
+    if (this.includeImports) {
+      importStatements.push(
+        new ImportStatement("shift_codegen_py.polyfill", {
+          children: ["*"],
+        })
+      );
+    }
+
     this.importedModules.forEach((importedModule) => {
       importStatements.push(new ImportStatement(importedModule));
     });

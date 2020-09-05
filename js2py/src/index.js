@@ -114,7 +114,9 @@ if (args["--help"]) {
       }, []),
       {
         config: {
-          description: { maxWidth: 80 },
+          description: {
+            maxWidth: 80,
+          },
         },
       }
     )
@@ -138,12 +140,10 @@ if (args["--version"]) {
 const requiredOutputScriptImports = `from shift_codegen_py.polyfill import *${os.EOL}`;
 
 function transpileAndExit(input) {
-  let output = transpile(input, {
+  const output = transpile(input, {
     topLevelComment: !!args["--tl-comment"],
+    includeImports: !!args["--include-import"],
   });
-  if (args["--include-import"]) {
-    output = requiredOutputScriptImports + os.EOL + output;
-  }
   const filePath = args["--output"];
   if (filePath) {
     fs.writeFileSync(filePath, output);

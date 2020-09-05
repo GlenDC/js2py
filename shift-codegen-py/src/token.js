@@ -407,34 +407,14 @@ class CallExpression extends Token {
   }
 
   emit(ts, opts) {
-    const postElements = [];
-    const args = [];
-    for (let i = 0; i < this.arguments.length; ++i) {
-      if (this.arguments[i] instanceof ByOneOperation) {
-        if (this.arguments[i].isPrefix) {
-          this.arguments[i].emit(ts, opts);
-          ts.putEOL(opts);
-          ts.putIndention(opts);
-        } else {
-          postElements.push(this.arguments[i].toAssignment());
-        }
-        args.push(this.arguments[i].operand);
-      } else {
-        args.push(this.arguments[i]);
-      }
-    }
-
     // emit the callee, init arguments will already have been added
     this.callee.emit(ts, opts);
+    const args = [];
+    for (let i = 0; i < this.arguments.length; ++i) {
+      args.push(this.arguments[i]);
+    }
     // and the modified arguments
     new RawTuple(...args).emit(ts, opts);
-
-    // draw all post elements
-    postElements.forEach((element) => {
-      ts.putEOL(opts);
-      ts.putIndention(opts);
-      element.emit(ts, opts);
-    });
   }
 }
 
@@ -535,14 +515,12 @@ class ByOneOperation extends Token {
   }
 
   emit(ts, opts) {
-    this.toAssignment().emit(ts, opts);
-  }
-
-  toAssignment() {
-    return new Assignment(
-      this.operand,
-      new InfixOperation(this.operator, this.operand, new LiteralNumeric(1))
-    );
+    const fname = `${this.isPrefix ? "" : "p"}${
+      this.operator === "+" ? "inc" : "dec"
+    }`;
+    new CallExpression(
+      new PropertyGetterExpression(this.operand, new Identifier(fname))
+    ).emit(ts, opts);
   }
 }
 
