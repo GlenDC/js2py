@@ -93,13 +93,6 @@ class JSObject(object):
         except KeyError:
             return False
 
-    # used to support the { a, b } destruct syntax of an object
-    def destruct(self, *propnames, target=None):
-        if target:
-            for pname in propnames:
-                target[pname] = target
-        return (self[pname] for pname in propnames)
-
     # function call
 
     def __call__(self, *args):
@@ -1313,10 +1306,17 @@ class Scope(object):
     def __setitem__(self, name, value):
         """
         magic func only used for destructing
+        # TODO:
+        # move to assign, so we return the values there as well,
+        # and also make this destruct logic avaialble for var, let and const...
         """
-        if isinstance(name, Sequence):
-            for name, value in zip(name, value):
-                self.assign(name, value)
+        if type(name) is list:
+            if not isinstance(value, JSObject):
+                raise RuntimeError(
+                    "setting multiple items at once is only added to support JSObject prop destructing")
+            names, obj = name, value
+            for name in names:
+                self.assign(name, obj[name])
             return
         self.assign(name, value)
 
