@@ -1323,19 +1323,27 @@ class Scope(object):
             except TypeError:  # NoneType is not subscriptable...
                 return JSUndefined()
 
+    def _destruct(self, fn, names, value):
+        values = []
+        if isinstance(value, JSArray):
+            for name, value in zip(names, value):
+                values.append(value)
+                fn(name, value)
+        else:
+            obj = value
+            for name in names:
+                value = obj[name]
+                values.append(value)
+                fn(name, value)
+        return values
+
     def declare_var(self, name, value):
         """
         Declare the value as a var, overwriting the reference if it
         already existed before.
         """
         if type(name) is list:  # supported for destruct purposes
-            names, obj = name, value
-            values = []
-            for name in names:
-                value = obj[name]
-                values.append(value)
-                self.declare_var(name, value)
-            return values
+            return self._destruct(self.declare_var, name, value)
         if not isinstance(value, JSObject):
             raise RuntimeError("only objects can be set in scope")
         stored_kind_value_pair = self[name]
@@ -1367,13 +1375,7 @@ class Scope(object):
         Declare the value as a let, raising an exception if it already exists.
         """
         if type(name) is list:  # supported for destruct purposes
-            names, obj = name, value
-            values = []
-            for name in names:
-                value = obj[name]
-                values.append(value)
-                self.declare_let(name, value)
-            return values
+            return self._destruct(self.declare_let, name, value)
         if not isinstance(value, JSObject):
             raise RuntimeError("only objects can be set in scope")
         if self._exists(name, current_scope_only=True):
@@ -1386,13 +1388,7 @@ class Scope(object):
         Declare the value as a const, raising an exception if it already exists.
         """
         if type(name) is list:  # supported for destruct purposes
-            names, obj = name, value
-            values = []
-            for name in names:
-                value = obj[name]
-                values.append(value)
-                self.declare_const(name, value)
-            return values
+            return self._destruct(self.declare_const, name, value)
         if not isinstance(value, JSObject):
             raise RuntimeError("only objects can be set in scope")
         if self._exists(name, current_scope_only=True):
