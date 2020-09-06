@@ -74,8 +74,7 @@ class JSObject(object):
         self._properties[name] = value
         return value
 
-    def __setitem__(self, name, value):
-        self.assign(name, value)
+    # __setitem__ has no purpose, given it is not an expression
 
     def __getitem__(self, name):
         try:
@@ -1281,6 +1280,12 @@ class Scope(object):
         if no value was referenced using this name before it will
         implicitly be declared as if it were a `var`-scoped value.
         """
+        if type(name) is list:  # supported for destruct purposes
+            names, obj = name, value
+            values = []
+            for name in names:
+                values.append(self.assign(name, obj[name]))
+            return values
         try:
             p = self._refs[name]
             if p[0] == self.__REF_KIND_MAGIC:
@@ -1303,23 +1308,6 @@ class Scope(object):
     # as it is not an expression, not allowing us to use it as we want,
     # therefore the assign is better to avoid confusion
 
-    def __setitem__(self, name, value):
-        """
-        magic func only used for destructing
-        # TODO:
-        # move to assign, so we return the values there as well,
-        # and also make this destruct logic avaialble for var, let and const...
-        """
-        if type(name) is list:
-            if not isinstance(value, JSObject):
-                raise RuntimeError(
-                    "setting multiple items at once is only added to support JSObject prop destructing")
-            names, obj = name, value
-            for name in names:
-                self.assign(name, obj[name])
-            return
-        self.assign(name, value)
-
     def __getitem__(self, name):
         """
         Return the value using the name as reference,
@@ -1340,6 +1328,16 @@ class Scope(object):
         Declare the value as a var, overwriting the reference if it
         already existed before.
         """
+        if type(name) is list:  # supported for destruct purposes
+            names, obj = name, value
+            values = []
+            for name in names:
+                value = obj[name]
+                values.append(value)
+                self.declare_var(name, value)
+            return values
+        if not isinstance(value, JSObject):
+            raise RuntimeError("only objects can be set in scope")
         stored_kind_value_pair = self[name]
         if stored_kind_value_pair:
             # magic vars require magical behavior, plish plash
@@ -1368,7 +1366,17 @@ class Scope(object):
         """
         Declare the value as a let, raising an exception if it already exists.
         """
-        if self.__exists(name):
+        if type(name) is list:  # supported for destruct purposes
+            names, obj = name, value
+            values = []
+            for name in names:
+                value = obj[name]
+                values.append(value)
+                self.declare_let(name, value)
+            return values
+        if not isinstance(value, JSObject):
+            raise RuntimeError("only objects can be set in scope")
+        if self._exists(name, current_scope_only=True):
             raise SyntaxError(f"Identifier '{name}' has already been declared")
         self._refs[name] = [self.__REF_KIND_LET, value]
         return JSUndefined()
@@ -1377,12 +1385,22 @@ class Scope(object):
         """
         Declare the value as a const, raising an exception if it already exists.
         """
-        if self.__exists(name):
+        if type(name) is list:  # supported for destruct purposes
+            names, obj = name, value
+            values = []
+            for name in names:
+                value = obj[name]
+                values.append(value)
+                self.declare_const(name, value)
+            return values
+        if not isinstance(value, JSObject):
+            raise RuntimeError("only objects can be set in scope")
+        if self._exists(name, current_scope_only=True):
             raise SyntaxError(f"Identifier '{name}' has already been declared")
         self._refs[name] = [self.__REF_KIND_CONST, value]
         return JSUndefined()
 
-    def __exists(self, name):
+    def _exists(self, name, current_scope_only=False):
         """
         Check if a value exists within scope,
         only to be used within the internal API
@@ -1397,8 +1415,9 @@ class Scope(object):
                 raise SyntaxError(f"Unexpected token '{name}'")
             return True
         except KeyError:
-            return False if self._parent_scope is None else self._parent_scope.exists(
-                name)
+            if not self._parent_scope or current_scope_only:
+                return False
+            return self._parent_scope._exists(name)
 
 
 class FunctionScope(Scope):
