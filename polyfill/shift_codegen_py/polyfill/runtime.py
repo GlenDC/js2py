@@ -69,7 +69,13 @@ class JSObject(object):
         self._ref = ref or 'undefined'
 
     def assign(self, name, value):
+        if not isinstance(value, JSObject):
+            raise RuntimeError("only objects can be set as properties")
         self._properties[name] = value
+        return value
+
+    def __setitem__(self, name, value):
+        self.assign(name, value)
 
     def __getitem__(self, name):
         try:
@@ -86,6 +92,13 @@ class JSObject(object):
             return True
         except KeyError:
             return False
+
+    # used to support the { a, b } destruct syntax of an object
+    def destruct(self, *propnames, target=None):
+        if target:
+            for pname in propnames:
+                target[pname] = target
+        return (self[pname] for pname in propnames)
 
     # function call
 
@@ -1296,6 +1309,16 @@ class Scope(object):
     # __setitem__ has no purpose,
     # as it is not an expression, not allowing us to use it as we want,
     # therefore the assign is better to avoid confusion
+
+    def __setitem__(self, name, value):
+        """
+        magic func only used for destructing
+        """
+        if isinstance(name, Sequence):
+            for name, value in zip(name, value):
+                self.assign(name, value)
+            return
+        self.assign(name, value)
 
     def __getitem__(self, name):
         """
