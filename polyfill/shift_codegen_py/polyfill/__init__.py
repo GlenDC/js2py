@@ -9,7 +9,4 @@ from .runtime import *
 from .std import *
 
 # Global Scope Object
-from .globals import *
-
-# create global scope already
-scope = GlobalScope()
+from .globals import scope  # declares the scope global var

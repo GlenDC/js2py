@@ -8,7 +8,18 @@ including the hoisting concept, of Javascript
 within the Python runtime.
 """
 
+import inspect
 from collections.abc import Sequence
+
+###############################################
+# Runtime Errors
+###############################################
+
+
+class ObjectIsNaNError(Exception):
+    """
+    Returned in case an object is NaN
+    """
 
 ###############################################
 # OBJECTS
@@ -20,7 +31,6 @@ from collections.abc import Sequence
 # - add unit tests
 # - support automated linting
 
-
 # TODO:
 # - validate that all operators work correctly
 # - check if our JSNaN and JSInfinity can rely more on JSNumber for operators
@@ -28,27 +38,54 @@ from collections.abc import Sequence
 
 
 class JSObject(object):
+    _static_properties = {}
+
+    @classmethod
+    def jsstaticmethod(cls, name, fn):
+        # TODO: validate if this is really what we want,
+        # the class being the owner...
+        fn = JSFunction(fn, parameters=parameters, owner=cls)
+        cls.jsstaticprop_set(name, fn)
+        return fn
+
+    @staticmethod
+    def jsstaticprop_set(name, fn):
+        JSObject._static_properties[name] = fn
+
+    @staticmethod
+    def jsstaticprop_del(name):
+        del JSObject._static_properties[name]
+
+    @staticmethod
+    def jsstaticprop_get(name):
+        return JSObject._static_properties[name]
+
     def __init__(self, ref=None):
         self._properties = {}
+        self._magic_properties = {}
         self.set_reference(ref)
 
     def set_reference(self, ref=None):
         self._ref = ref or 'undefined'
 
-    def __setitem__(self, name, value):
+    def assign(self, name, value):
         self._properties[name] = value
 
     def __getitem__(self, name):
         try:
-            return self._properties[name]
+            return self._magic_properties[name]
         except KeyError:
-            return JSUndefined()
+            try:
+                return self._properties[name]
+            except KeyError:
+                return JSUndefined()
 
     def __delitem__(self, name):
         try:
             del self._properties[name]
+            return True
         except KeyError:
-            pass
+            return False
 
     # function call
 
@@ -82,15 +119,27 @@ class JSObject(object):
     def __str__(self):
         return "[object Object]"
 
+    def to_string(self):
+        return JSString(str(self), ref=self._ref)
+
     # Bool representation
 
     def __bool__(self):
         return True
 
+    def to_bool(self):
+        return JSBool(bool(self), ref=self._ref)
+
     # Number representation
 
     def __float__(self):
-        return JSNaN()
+        raise ObjectIsNaNError()
+
+    def to_number(self):
+        try:
+            return JSNumber(float(self), ref=self._ref)
+        except ObjectIsNaNError:
+            return JSNaN()
 
     # Unary Operators
 
@@ -240,7 +289,7 @@ class JSUndefined(JSObject):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def __setitem__(self, name, value):
+    def assign(self, name, value):
         raise TypeError("Cannot set property '{name}' of undefined")
 
     def __getitem__(self, name):
@@ -260,7 +309,7 @@ class JSNull(JSObject):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def __setitem__(self, name, value):
+    def assign(self, name, value):
         raise TypeError("Cannot set property '{name}' of undefined")
 
     def __getitem__(self, name):
@@ -721,9 +770,9 @@ class JSNumber(JSObject):
         return self._value <= f
 
 
-class JSNaN(JSNumber):
+class JSNaN():
     def __init__(self, *args, **kwargs):
-        super().__init__(float('nan'), *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def __str__(self):
         return "NaN"
@@ -1058,7 +1107,14 @@ class JSString(JSObject):
         return self._value != ""
 
     def __float__(self):
-        return JSNaN() if self._value == "" else JSNumber(0)
+        try:
+            # TODO: validate this gives the exact same results as JS
+            return float(self._value)
+        except Exception:
+            raise ObjectIsNaNError()
+
+    def is_empty(self):
+        return not self._value.strip()
 
 
 class JSArray(JSObject):
@@ -1130,7 +1186,7 @@ class JSFunction(JSObject):
     def __str__(self):
         if self._repr:
             return self._repr
-        return "function {self._ref if self._ref else ''}() {{ [native code] }}"
+        return f"[Function: {self._ref}]"
 
 
 ###############################################
@@ -1237,11 +1293,9 @@ class Scope(object):
             self.declare_var(name, value)
             return value
 
-    def __setitem__(self, name, value):
-        # easy shortcut for self.assign,
-        # reason self.assign exists is because in JS assignment is an expression,
-        # returning the right-hand side...
-        self.assign(name, value)
+    # __setitem__ has no purpose,
+    # as it is not an expression, not allowing us to use it as we want,
+    # therefore the assign is better to avoid confusion
 
     def __getitem__(self, name):
         """
@@ -1377,3 +1431,21 @@ class BlockScope(Scope):
 
         def declare_var(self, name, value):
             self._parent_scope.declare_var(name, value)
+
+
+#############################
+# Decorators
+#############################
+
+
+def jsfunc(owner, name, parameters=None):
+    """
+    Decorator to create a stand-alone JS function
+    """
+    def decorator(fn):
+        if not isinstance(owner, Scope):
+            raise RuntimeError("only global methods supported for now")
+        fn = JSFunction(fn, parameters=parameters, ref=name)
+        owner.declare_var(name, fn)
+        return fn
+    return decorator
