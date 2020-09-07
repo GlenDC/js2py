@@ -12,10 +12,12 @@ const {
   // Branch Types
   IfExpression,
   // Loop Types
-  WhileExpression, // Used for For loops and Do-While loops as well
+  WhileExpression, // Used for For Do-While loops as well
+  ForExpression,
   // Expression Types
   PrefixOperation, // AKA Unary Operations
   InfixOperation, // AKA binary operations
+  InPlaceOperation, // also binary ops, but in-place variant
   ByOneOperation, // ++ / --
   Assignment,
   CallExpression,
@@ -49,8 +51,6 @@ const { version: projectVersion } = require("../package.json");
 
 class PyCodeGen {
   constructor({ topLevelComment, includeImports } = {}) {
-    this.ignoreConsoleCalls = true; // hardcoded for now, would require polyfill if desired
-
     // a top level comment to indicate we generated it,
     // and including the original javascript code (or at least the one generated
     // from the AST that we used)
@@ -91,7 +91,7 @@ class PyCodeGen {
   }
 
   reduceAssignmentExpression(node, { binding, expression }) {
-    return this._reduceAssignmentStatement(binding, expression);
+    return new Assignment(binding, expression);
   }
 
   reduceAssignmentTargetIdentifier(node) {
@@ -166,31 +166,7 @@ class PyCodeGen {
   }
 
   reduceCallExpression(node, { callee, arguments: args }) {
-    // flatten the args when comma-separated trick is used
-    const resultElements = [];
-    const flatArgs = [];
-    args.forEach((arg) => {
-      const [elements, element] = this._flattenCommaSeparatedElements(arg);
-      resultElements.push(...elements.flat());
-      flatArgs.push(element);
-    });
-
-    // TODO: support ignore console calls better,
-    // as aliasing and other indirect uses of console will still fail...
-    const callExpression = new CallExpression(callee, flatArgs);
-    if (
-      this.ignoreConsoleCalls &&
-      (callee.str == "console" || (callee.obj && callee.obj.str === "console"))
-    ) {
-      const ts = new TokenStream();
-      callExpression.emit(ts);
-      return new Comment(`code removed by js2py: ${ts.result}`);
-    }
-    if (resultElements.length > 0) {
-      resultElements.push(callExpression);
-      return resultElements;
-    }
-    return callExpression;
+    return new CallExpression(callee, args);
   }
 
   reduceCatchClause(node, elements) {
@@ -211,9 +187,10 @@ class PyCodeGen {
 
   reduceCompoundAssignmentExpression(node, { binding, expression }) {
     // to keep things simple, use a regular assignment + infix operation
-    return new Assignment(
+    return new InPlaceOperation(
+      node.operator.slice(0, -1),
       binding,
-      new InfixOperation(node.operator.slice(0, -1), binding, expression)
+      expression
     );
   }
 
@@ -247,7 +224,7 @@ class PyCodeGen {
 
   reduceDirective(node) {
     const delim = node.rawValue.match(/(^|[^\\])(\\\\)*"/) ? "'" : '"';
-    return new LiteralString(node.rawValue, delim);
+    return new LiteralString(node.rawValue, { delim });
   }
 
   reduceDoWhileStatement(node, { body, test }) {
@@ -303,11 +280,7 @@ class PyCodeGen {
   }
 
   reduceForStatement(node, { init, test, update, body }) {
-    if (update) {
-      body.lines.push(update);
-    }
-    const whileExpr = new WhileExpression(test, body);
-    return init ? [init, whileExpr] : whileExpr;
+    return new ForExpression(init, test, update, body);
   }
 
   reduceFormalParameters(node, elements) {
@@ -390,7 +363,7 @@ class PyCodeGen {
 
   reduceLiteralStringExpression(node) {
     const delim = node.value.match(/(^|[^\\])(\\\\)*"/) ? "'" : '"';
-    return new LiteralString(node.value, delim);
+    return new LiteralString(node.value, { delim });
   }
 
   reduceMethod(node, elements) {
@@ -581,59 +554,8 @@ class PyCodeGen {
     if (init === null) {
       init = PyNone;
     }
-    return this._reduceAssignmentStatement(binding, init);
-  }
-
-  _reduceAssignmentStatement(binding, init) {
-    let [elements, initToBind] = this._flattenCommaSeparatedElements(init);
-    elements = elements.flat();
-    elements.push(new Assignment(binding, initToBind));
-    return elements;
-  }
-
-  // as to emulate JS's behaviour of this silly comma-abuse, poor little comma
-  _flattenCommaSeparatedElements(element) {
-    let elements = [];
-    let startElement = element;
-    while (
-      startElement instanceof RawTuple &&
-      startElement.expressions.length === 1
-    ) {
-      startElement = startElement.expressions[0];
-    }
-    if (
-      startElement instanceof InfixOperation &&
-      startElement.operator === ","
-    ) {
-      // handle left element(s)
-      let innerElement = startElement.left;
-      while (
-        innerElement instanceof InfixOperation &&
-        innerElement.operator == ","
-      ) {
-        const [recElements, recElement] = this._flattenCommaSeparatedElements(
-          innerElement.right
-        );
-        elements.unshift(new Line(recElement));
-        if (recElements.length > 0) {
-          elements.unshift(recElements);
-        }
-        innerElement = innerElement.left;
-      }
-      elements.unshift(new Line(innerElement));
-      // handle right element(s)
-      let [rightElements, rightElement] = this._flattenCommaSeparatedElements(
-        startElement.right
-      );
-      while (rightElements.length > 0) {
-        elements.push(rightElements);
-        [rightElements, rightElement] = this._flattenCommaSeparatedElements(
-          rightElement
-        );
-      }
-      element = rightElement;
-    }
-    return [elements, element];
+    // TODO: replace with actual var/let/const thing
+    return new Assignment(binding, init);
   }
 
   reduceWhileStatement(node, { test, body }) {

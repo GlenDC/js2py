@@ -55,6 +55,21 @@ const BinaryPrecedence = {
   "**": Precedence.Exponential,
 };
 
+const BinaryOperatorToPythonInPlaceMethod = {
+  "|": "__ior__",
+  "^": "__ixor__",
+  "&": "__iand__",
+  "<<": "__ilshift__",
+  ">>": "__irshift__",
+  ">>>": "__irshift__",
+  "+": "__iadd__",
+  "-": "__isub__",
+  "*": "__imul__",
+  "%": "__imod__",
+  "/": "__itruediv__",
+  "**": "__ipow__",
+};
+
 function toPythonOp(operator) {
   switch (operator) {
     case "&&":
@@ -162,8 +177,8 @@ function GetPrecedence(node) {
 class Token {
   constructor() {}
 
-  forEach(f) {
-    f(this);
+  emit(ts, parent, opts) {
+    throw new Error("NotImplemented");
   }
 }
 
@@ -173,7 +188,7 @@ class StringToken extends Token {
     this.str = str;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     ts.put(this.str, opts);
   }
 }
@@ -190,7 +205,7 @@ class LiteralBoolean extends Token {
     this.value = value ? "True" : "False";
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     // TODO: get constructor from scope
     // TODO: call constructor (static from type) instead of using `()` implicitly
     ts.put(`JSBool(${this.value})`, opts);
@@ -203,7 +218,7 @@ class LiteralNumeric extends Token {
     this.x = x;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     // TODO: get constructor from scope
     // TODO: call constructor (static from type) instead of using `()` implicitly
     ts.put(`JSNumber(${renderNumber(this.x)})`, opts);
@@ -232,29 +247,45 @@ function renderNumber(n) {
     .replace(/[eE]\+/, "e");
 }
 
-class LiteralString extends Token {
-  constructor(str, delim, isRaw) {
+class PythonString extends Token {
+  constructor(str, { delim, isRaw, multiline }) {
     super();
     this.str = str;
     this.delim = delim || `'`;
     this.isRaw = !!isRaw;
+    this.multiline = !!multiline;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     // TODO: get constructor from scope
     // TODO: call constructor (static from type) instead of using `()` implicitly
-    ts.put(`JSString(`), opts;
     if (this.isRaw) {
       ts.put("r", opts);
     }
-    ts.put(this.delim, opts);
-    ts.put(
-      this.str,
-      Object.assign(Object.assign({}, opts), {
-        escape: [[this.delim, `\\${this.delim}`]],
-      })
-    );
-    ts.put(this.delim, opts);
+    const delim = this.multiline ? this.delim.repeat(3) : this.delim;
+    ts.put(delim, opts);
+    if (this.str instanceof Token) {
+      this.str.emit(ts, this, opts);
+    } else {
+      ts.put(
+        this.str,
+        Object.assign(Object.assign({}, opts), {
+          escape: [[this.delim, `\\${this.delim}`]],
+        })
+      );
+    }
+    ts.put(delim, opts);
+  }
+}
+
+class LiteralString extends PythonString {
+  constructor(str, opts) {
+    super(str, opts);
+  }
+
+  emit(ts, parent, opts) {
+    ts.put(`JSString(`, opts);
+    super.emit(ts, parent, opts);
     ts.put(`)`, opts);
   }
 }
@@ -281,7 +312,7 @@ class LiteralRegexp extends Token {
     this.unicode = !!unicode;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     ts.put('re.compile(r"', opts);
     ts.put(this.pattern.replace(/"/g, '\\"'), opts);
     ts.put('"', opts);
@@ -306,14 +337,14 @@ class RawTuple extends Token {
     this.expressions = (expressions || []).flat();
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     ts.put("(", opts);
     if (this.expressions.length > 0) {
       for (let i = 0; i < this.expressions.length - 1; i++) {
-        this.expressions[i].emit(ts, opts);
+        this.expressions[i].emit(ts, this, opts);
         ts.put(", ", opts);
       }
-      this.expressions[this.expressions.length - 1].emit(ts, opts);
+      this.expressions[this.expressions.length - 1].emit(ts, this, opts);
     }
     ts.put(")", opts);
   }
@@ -325,10 +356,10 @@ class Line extends Token {
     this.statements = (statements || []).flat();
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     if (this.statements.length > 0) {
       ts.putIndention(opts);
-      this.statements.forEach((x) => x.emit(ts, opts));
+      this.statements.forEach((x) => x.emit(ts, this, opts));
     }
     ts.putEOL(opts);
   }
@@ -345,16 +376,16 @@ class Block extends Token {
     this.isTopLevel = false;
   }
 
-  emit(ts, opts = {}) {
+  emit(ts, parent, opts = {}) {
     if (this.lines.length > 0) {
       this.lines.forEach((line) => {
         if (!(line instanceof Line) && !(line instanceof Block)) {
           line = new Line(line);
         }
-        line.emit(ts, opts);
+        line.emit(ts, this, opts);
       });
     } else if (!this.isTopLevel) {
-      new Line(new Keyword("pass")).emit(ts, opts);
+      new Line(new Keyword("pass")).emit(ts, this, opts);
     }
   }
 }
@@ -365,7 +396,7 @@ class TemplateExpression extends Token {
     this.children = (children || []).flat();
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     let delim = `"`;
     if (
       this.children.some(
@@ -384,6 +415,7 @@ class TemplateExpression extends Token {
       if (child instanceof RawToken) {
         child.emit(
           ts,
+          this,
           Object.assign(Object.assign({}, opts), {
             escape: childEscapePairs,
           }),
@@ -391,7 +423,7 @@ class TemplateExpression extends Token {
         );
       } else {
         ts.put("{", opts);
-        child.emit(ts, opts);
+        child.emit(ts, this, opts);
         ts.put("}", opts);
       }
     });
@@ -406,15 +438,15 @@ class CallExpression extends Token {
     this.arguments = (args || []).flat();
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     // emit the callee, init arguments will already have been added
-    this.callee.emit(ts, opts);
+    this.callee.emit(ts, this, opts);
     const args = [];
     for (let i = 0; i < this.arguments.length; ++i) {
       args.push(this.arguments[i]);
     }
     // and the modified arguments
-    new RawTuple(...args).emit(ts, opts);
+    new RawTuple(...args).emit(ts, this, opts);
   }
 }
 
@@ -425,10 +457,10 @@ class PropertyGetterExpression extends Token {
     this.id = id;
   }
 
-  emit(ts, opts) {
-    this.obj.emit(ts, opts);
+  emit(ts, parent, opts) {
+    this.obj.emit(ts, this, opts);
     ts.put(".", opts);
-    this.id.emit(ts, opts);
+    this.id.emit(ts, this, opts);
   }
 }
 
@@ -439,13 +471,13 @@ class PrefixOperation extends Token {
     this.expression = expression;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     ts.put(this.operator, opts);
     // parentheses aren't always required,
     // but they are always accepted in Python,
     // so better safe than sorry
     ts.put("(", opts);
-    this.expression.emit(ts, opts);
+    this.expression.emit(ts, this, opts);
     ts.put(")", opts);
   }
 }
@@ -454,17 +486,68 @@ class InfixOperation extends Token {
   constructor(operator, left, right) {
     super();
     this.operator = toPythonOp(operator);
+    this.left = left instanceof Array ? left[0] : left;
+    this.right = right instanceof Array ? right[0] : right;
+  }
+
+  emit(ts, parent, opts) {
+    if (this.operator === ",") {
+      const strOpts = { delim: "'", isRaw: true, multiline: true };
+      new CallExpression(
+        new RawToken("jschain"),
+        new RawToken("scope"), // TODO replace with actual scope, instead of global one
+        new PythonString(this.left, strOpts),
+        new PythonString(this.right, strOpts)
+      ).emit(ts, this, opts);
+    } else {
+      this.left.emit(ts, this, opts);
+      ts.put(` ${this.operator} `, opts);
+      this.right.emit(ts, this, opts);
+    }
+  }
+
+  flat() {
+    const out = [];
+    if (this.left.flat) {
+      out.push(...this.left.flat());
+    } else {
+      out.push(this.left);
+    }
+    if (this.right.flat) {
+      out.push(...this.right.flat());
+    } else {
+      out.push(this.right);
+    }
+    return out;
+  }
+}
+
+class InPlaceOperation extends Token {
+  constructor(operator, left, right) {
+    super();
+    this.operator = toPythonOp(operator);
     this.left = left;
     this.right = right;
   }
 
-  emit(ts, opts) {
-    this.left.emit(ts, opts);
-    if (this.operator !== ",") {
-      ts.put(" ", opts);
+  emit(ts, parent, opts) {
+    if (parent instanceof Line) {
+      // Keep it pythonic when used as a statement
+      this.left.emit(ts, this, opts);
+      ts.put(` ${this.operator}= `, opts);
+      this.right.emit(ts, this, opts);
+    } else {
+      // use the magic function instead,
+      // as to be able to use it as an expression as we desire here
+      const fnName = BinaryOperatorToPythonInPlaceMethod[this.operator];
+      if (!fnName) {
+        throw new Error(`unexpected binary in-place operator ${this.operator}`);
+      }
+      return new CallExpression(
+        new PropertyGetterExpression(this.left, new Identifier(fnName)),
+        this.right
+      ).emit(ts, this, opts);
     }
-    ts.put(`${this.operator} `, opts);
-    this.right.emit(ts, opts);
   }
 }
 
@@ -473,7 +556,7 @@ class Assignment extends InfixOperation {
     super("=", left, right);
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     if (this.right instanceof ByOneOperation) {
       const statements = [
         this.right,
@@ -482,21 +565,21 @@ class Assignment extends InfixOperation {
       if (!this.right.isPrefix) {
         statements.reverse();
       }
-      statements[0].emit(ts, opts);
+      statements[0].emit(ts, this, opts);
       // we never want to indent first statement in this case,
       // either not needed, if top-level,
       // or already done by parent (block)
       ts.putEOL(opts);
       // EOL at the end will be put by parent (block);
       ts.putIndention(opts);
-      statements[1].emit(ts, opts);
+      statements[1].emit(ts, this, opts);
     } else {
-      this.left.emit(ts, opts);
+      this.left.emit(ts, this, opts);
       if (this.operator !== ",") {
         ts.put(" ", opts);
       }
       ts.put(`${this.operator} `, opts);
-      this.right.emit(ts, opts);
+      this.right.emit(ts, this, opts);
     }
   }
 }
@@ -514,13 +597,13 @@ class ByOneOperation extends Token {
     this.isPrefix = isPrefix;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     const fname = `${this.isPrefix ? "" : "p"}${
       this.operator === "+" ? "inc" : "dec"
     }`;
     new CallExpression(
       new PropertyGetterExpression(this.operand, new Identifier(fname))
-    ).emit(ts, opts);
+    ).emit(ts, this, opts);
   }
 }
 
@@ -530,7 +613,7 @@ class Comment extends Token {
     this.str = str;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     ts.put(`# ${this.str}`, opts);
   }
 }
@@ -541,13 +624,13 @@ class MultiLineComment extends Token {
     this.lines = (lines || []).flat();
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     const delim = new Line(new RawToken(`"""`));
-    delim.emit(ts, opts);
+    delim.emit(ts, this, opts);
     this.lines.forEach((line) => {
-      new Line(new RawToken(line)).emit(ts, opts);
+      new Line(new RawToken(line)).emit(ts, this, opts);
     });
-    delim.emit(ts, opts);
+    delim.emit(ts, this, opts);
     // to make more python, add extra EOL
     ts.putEOL();
   }
@@ -564,20 +647,20 @@ class ImportStatement extends Token {
     this.alias = alias;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     if (this.children) {
       new Line(
         new RawToken(
           `from ${this.moduleName} import ${this.children.join(", ")}`
         )
-      ).emit(ts, opts);
+      ).emit(ts, this, opts);
       return;
     }
     const statements = [new RawToken(`import ${this.moduleName}`)];
     if (this.alias) {
       statements.push(new RawToken(` as ${this.alias}`));
     }
-    new Line(...statements).emit(ts, opts);
+    new Line(...statements).emit(ts, this, opts);
   }
 }
 
@@ -588,13 +671,50 @@ class WhileExpression extends Token {
     this.body = body instanceof Block ? body : new Block([body]);
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     ts.put("while ", opts);
-    this.test.emit(ts, opts);
+    this.test.emit(ts, this, opts);
     ts.put(":", opts);
     ts.putEOL();
     this.body.emit(
       ts,
+      this,
+      Object.assign(Object.assign({}, opts), {
+        lineIndention: (opts.lineIndention || 0) + (this.isTopLevel ? 0 : 1),
+      })
+    );
+  }
+}
+
+class ForExpression extends Token {
+  constructor(init, test, update, body) {
+    super();
+    this.init = (init || []).flat();
+    this.test = test;
+    this.body = body instanceof Block ? body : new Block([body]);
+    if (update) {
+      this.body.lines.push(update);
+    }
+  }
+
+  emit(ts, parent, opts) {
+    if (this.init.length) {
+      const initParent = this;
+      this.init.forEach((expr) => {
+        expr.emit(ts, initParent, opts);
+        if (!(expr instanceof Line)) {
+          ts.putEOL();
+          ts.putIndention();
+        }
+      });
+    }
+    ts.put("while ", opts);
+    this.test.emit(ts, this, opts);
+    ts.put(":", opts);
+    ts.putEOL();
+    this.body.emit(
+      ts,
+      this,
       Object.assign(Object.assign({}, opts), {
         lineIndention: (opts.lineIndention || 0) + (this.isTopLevel ? 0 : 1),
       })
@@ -618,7 +738,7 @@ class IfExpression extends Token {
     }
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     this._emitConsequent(ts, opts);
     this._emitAlternate(ts, opts);
   }
@@ -627,16 +747,18 @@ class IfExpression extends Token {
     if (opts.isAlternateOfIfExpression) {
       new Line(new RawToken(`elif `), this.test, new RawToken(":")).emit(
         ts,
+        this,
         opts
       );
     } else {
       ts.put("if ", opts);
-      this.test.emit(ts, opts);
+      this.test.emit(ts, this, opts);
       ts.put(":", opts);
       ts.putEOL(opts);
     }
     this.consequent.emit(
       ts,
+      this,
       Object.assign(Object.assign({}, opts), {
         lineIndention: (opts.lineIndention || 0) + 1,
         isAlternateOfIfExpression: false,
@@ -655,6 +777,7 @@ class IfExpression extends Token {
     if (this.alternate instanceof IfExpression) {
       this.alternate.emit(
         ts,
+        this,
         Object.assign(Object.assign({}, opts), {
           isAlternateOfIfExpression: true,
         })
@@ -662,9 +785,10 @@ class IfExpression extends Token {
       return;
     }
 
-    new Line(new RawToken("else:")).emit(ts, opts);
+    new Line(new RawToken("else:")).emit(ts, this, opts);
     this.alternate.emit(
       ts,
+      this,
       Object.assign(Object.assign({}, opts), {
         lineIndention: (opts.lineIndention || 0) + 1,
         isAlternateOfIfExpression: true,
@@ -680,7 +804,7 @@ class TODO extends Token {
     this.reduceFunc = reduceFunc;
   }
 
-  emit(ts, opts) {
+  emit(ts, parent, opts) {
     ts.put(
       `raise Exception("TODO: support token '${this.element.result}' via '${this.reduceFunc}'")`
     );
@@ -708,6 +832,9 @@ module.exports = {
   StringToken,
   RawToken,
 
+  // Python Runtime types
+  PythonString, // like a LiteralString, but without being a JSString
+
   // Primitive Types
   LiteralBoolean,
   LiteralNumeric,
@@ -719,10 +846,12 @@ module.exports = {
 
   // Loop Types
   WhileExpression,
+  ForExpression,
 
   // Expression Types
   PrefixOperation, // AKA Unary Operations
   InfixOperation, // AKA binary operations
+  InPlaceOperation, // also binary operations, but modifying the object in place
   ByOneOperation, // ++ / --
   Assignment,
   CallExpression,
