@@ -1,9 +1,7 @@
 const repl = require("repl");
 const path = require("path");
-const fs = require("fs");
 const os = require("os");
 const socket = require("socket.io-client");
-const url = require("url");
 const gaze = require("gaze");
 
 const { parseScript } = require("shift-parser");
