@@ -43,16 +43,22 @@ const {
   // Temporary
   TODO,
 
+  // Python Types for Special Purposes
+  PythonFunctionDef,
+
   // Token Utilities
   GetPrecedence,
 } = require("./token");
 
 const { default: codeGen, FormattedCodeGen } = require("shift-codegen");
 
-const { version: projectVersion, bugs: projectBugs } = require("../package.json");
+const {
+  version: projectVersion,
+  bugs: projectBugs,
+} = require("../package.json");
 
 class PyCodeGen {
-  constructor({ topLevelComment, includeImports } = {}) {
+  constructor({ topLevelComment, includeImports, scopedScript } = {}) {
     // a top level comment to indicate we generated it,
     // and including the original javascript code (or at least the one generated
     // from the AST that we used)
@@ -62,6 +68,11 @@ class PyCodeGen {
     // TODO: delete, should no longer be needed
     this.importedModules = new Set();
 
+    // used to generate the script as a main function,
+    // rather than in the global namespace of the module
+    this.scopedScript = !!scopedScript;
+
+    // used to generate the import statements
     this.includeImports = !!includeImports;
   }
 
@@ -416,7 +427,9 @@ class PyCodeGen {
           `DO NOT EDIT: Code generated on ${new Date(
             new Date()
           ).toISOString()}`,
-          `by js2py v${projectVersion} using runtime NodeJS ${process.version} on ${os.type()}-${os.release()}-${os.arch()}.`,
+          `by js2py v${projectVersion} using runtime NodeJS ${
+            process.version
+          } on ${os.type()}-${os.release()}-${os.arch()}.`,
           "",
           "Please report any issues with the transpiled code in this file at:",
           projectBugs.url,
@@ -442,6 +455,26 @@ class PyCodeGen {
     this.importedModules.forEach((importedModule) => {
       importStatements.push(new ImportStatement(importedModule));
     });
+
+    if (this.scopedScript) {
+      // TODO: do we need a return value if we use this? Or should it always work via exports??
+      //  ... and how would exports work?
+      const block = new Block(
+        ...commentStatements,
+        ...importStatements,
+        new Block(
+          new PythonFunctionDef(
+            "main",
+            new Block(...directives, ...statements),
+            {
+              args: ["scope"],
+            }
+          )
+        )
+      );
+      block.isTopLevel = true;
+      return block;
+    }
 
     const block = new Block(
       ...commentStatements,

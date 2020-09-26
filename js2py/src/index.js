@@ -48,6 +48,12 @@ const argDefinitions = [
     shorthand: "-i",
   },
   {
+    description:
+      "print the script as a main function script instead of all in the global namespace (option available in non REPL mode only, in REPL it is always a global script)",
+    type: Boolean,
+    name: "--main-func",
+  },
+  {
     description: "show the version of your installed js2py version",
     type: Boolean,
     name: "--version",
@@ -143,6 +149,7 @@ function transpileAndExit(input) {
   const output = transpile(input, {
     topLevelComment: !!args["--tl-comment"],
     includeImports: !!args["--include-import"],
+    scopedScript: !!args["--main-func"],
   });
   const filePath = args["--output"];
   if (filePath) {

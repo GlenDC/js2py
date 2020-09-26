@@ -797,6 +797,43 @@ class IfExpression extends Token {
   }
 }
 
+class PythonFunctionDef extends Token {
+  constructor(name, body, { args, varg, kwargs } = {}) {
+    super();
+
+    this.name = name;
+    this.body = body;
+
+    this.args = args || [];
+    this.varg = varg; // allowed to be empty for a *
+    this.kwargs = kwargs || {};
+  }
+
+  emit(ts, parent, opts) {
+    // emit the signature...
+    let args = this.args.slice();
+    if (this.varg !== undefined) {
+      args.push(`*${this.varg}`);
+    }
+    Object.keys(this.kwargs).forEach((key) => {
+      args.push(`${key}=${this.kwargs[key]}`);
+    });
+    new Line(new RawToken(`def ${this.name}(${args.join(", ")}):`)).emit(
+      ts,
+      this,
+      opts
+    );
+    // ... and the body
+    this.body.emit(
+      ts,
+      this,
+      Object.assign(Object.assign({}, opts), {
+        lineIndention: (opts.lineIndention || 0) + 1,
+      })
+    );
+  }
+}
+
 class TODO extends Token {
   constructor(element, reduceFunc) {
     super();
@@ -880,6 +917,9 @@ module.exports = {
 
   // Temporary
   TODO,
+
+  // Python Types for special purposes
+  PythonFunctionDef,
 
   // Token Utilities
   GetPrecedence,
