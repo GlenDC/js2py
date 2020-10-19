@@ -27,6 +27,7 @@ class REPL {
   constructor({ evalPython, evalPythonServer } = {}) {
     this._generator = new js2py.PyCodeGen({
       topLevelComment: false,
+      disableDebugger: true,
     });
     this._evalPython = evalPython || evalPythonServer; // only possible when server defined for now
     this._evalPythonServer = evalPythonServer;

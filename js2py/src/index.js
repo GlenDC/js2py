@@ -49,6 +49,12 @@ const argDefinitions = [
   },
   {
     description:
+      "disable debugger code (option available in non REPL mode only, here it is always disabled)",
+    type: Boolean,
+    name: "--disable-debugger",
+  },
+  {
+    description:
       "print the script as a main function script instead of all in the global namespace (option available in non REPL mode only, in REPL it is always a global script)",
     type: Boolean,
     name: "--main-func",
@@ -150,6 +156,7 @@ function transpileAndExit(input) {
     topLevelComment: !!args["--tl-comment"],
     includeImports: !!args["--include-import"],
     scopedScript: !!args["--main-func"],
+    disableDebugger: !!args["--disable-debugger"],
   });
   const filePath = args["--output"];
   if (filePath) {

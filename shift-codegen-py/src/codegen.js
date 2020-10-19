@@ -30,9 +30,6 @@ const {
   // Scope Types
   Block,
   // Special Types
-  PyNaN,
-  PyInf,
-  PyNone,
   PyEmpty,
   // Other Types
   Comment,
@@ -44,10 +41,13 @@ const {
   TODO,
 
   // Python Types for Special Purposes
+  PythonString,
   PythonFunctionDef,
+  PythonList,
 
   // Token Utilities
   GetPrecedence,
+  StringToken,
 } = require("./token");
 
 const { default: codeGen, FormattedCodeGen } = require("shift-codegen");
@@ -58,7 +58,7 @@ const {
 } = require("../package.json");
 
 class PyCodeGen {
-  constructor({ topLevelComment, includeImports, scopedScript } = {}) {
+  constructor({ topLevelComment, includeImports, scopedScript, disableDebugger } = {}) {
     // a top level comment to indicate we generated it,
     // and including the original javascript code (or at least the one generated
     // from the AST that we used)
@@ -74,6 +74,9 @@ class PyCodeGen {
 
     // used to generate the import statements
     this.includeImports = !!includeImports;
+
+    // used to disable debug code
+    this.disableDebugger = !!disableDebugger;
   }
 
   // parenToAvoidBeingDirective(element, original) {
@@ -108,11 +111,13 @@ class PyCodeGen {
   }
 
   reduceAssignmentTargetIdentifier(node) {
-    return new Identifier(node.name);
+    // NOTE: strictly speaking this is an identifier,
+    // but for our codegen purposes this is really just a string
+    return new PythonString(node.name);
   }
 
-  reduceAssignmentTargetPropertyIdentifier(node, elements) {
-    return new TODO(node, "reduceAssignmentTargetPropertyIdentifier");
+  reduceAssignmentTargetPropertyIdentifier(node, { binding }) {
+    return binding;
   }
 
   reduceAssignmentTargetPropertyProperty(node, elements) {
@@ -151,7 +156,9 @@ class PyCodeGen {
   }
 
   reduceBindingIdentifier(node) {
-    return new Identifier(node.name);
+    // NOTE: strictly speaking this is an identifier,
+    // but for our codegen purposes this is really just a string
+    return new PythonString(node.name);
   }
 
   reduceBindingPropertyIdentifier(node, elements) {
@@ -232,7 +239,10 @@ class PyCodeGen {
   }
 
   reduceDebuggerStatement(node, elements) {
-    return new TODO(node, "reduceDebuggerStatement");
+    if (this.disableDebugger) {
+      return new Comment("breakpoint()");
+    }
+    return new CallExpression(new StringToken('breakpoint'));
   }
 
   reduceDirective(node) {
@@ -316,17 +326,9 @@ class PyCodeGen {
     return new TODO(node, "reduceGetter");
   }
 
-  reduceIdentifierExpression(node, elements) {
-    // TODO: what if name is `let, const, ...`???
-    if (node.name === "undefined") {
-      return PyNone;
-    }
-    if (node.name === "Infinity") {
-      return PyInf;
-    }
-    if (node.name === "NaN") {
-      return PyNaN;
-    }
+  reduceIdentifierExpression(node) {
+    // NOTE: specials such as NaN, Infinity, etc...
+    // are all handled by the python runtime polyfill code
     return new Identifier(node.name);
   }
 
@@ -335,15 +337,15 @@ class PyCodeGen {
   }
 
   reduceImport(node, elements) {
-    return new TODO(node, "reduceImport");
+    throw new EvalError("import statements and related aren't supported by JS2PY, single-file code only");
   }
 
   reduceImportNamespace(node, elements) {
-    return new TODO(node, "reduceImportNamespace");
+    throw new EvalError("import statements and related aren't supported by JS2PY, single-file code only");
   }
 
   reduceImportSpecifier(node, elements) {
-    return new TODO(node, "reduceImportSpecifier");
+    throw new EvalError("import statements and related aren't supported by JS2PY, single-file code only");
   }
 
   reduceLabeledStatement(node, elements) {
@@ -355,11 +357,11 @@ class PyCodeGen {
   }
 
   reduceLiteralInfinityExpression() {
-    return PyInf;
+    return new Identifier("Infinity");
   }
 
   reduceLiteralNullExpression() {
-    return PyNone;
+    return new Identifier("null");
   }
 
   reduceLiteralNumericExpression(node) {
@@ -395,12 +397,14 @@ class PyCodeGen {
     return new TODO(node, "reduceNewTargetExpression");
   }
 
-  reduceObjectAssignmentTarget(node, elements) {
-    return new TODO(node, "reduceObjectAssignmentTarget");
+  reduceObjectAssignmentTarget(node, { properties }) {
+    return new PythonList(properties);
   }
 
   reduceObjectBinding(node, elements) {
-    return new TODO(node, "reduceObjectBinding");
+    // NOTE: this relies on the rest of the code in knowing what to do with this
+    const listElements = node.properties.map(p => new PythonString(p.binding.name));
+    return new PythonList(listElements);
   }
 
   reduceObjectExpression(node, elements) {
@@ -580,6 +584,7 @@ class PyCodeGen {
   reduceVariableDeclaration(node, { declarators }) {
     const elements = [];
     declarators.forEach((declarator) => {
+      declarator.kind = node.kind;  // default was set to var up to this point
       elements.push(new Line(declarator));
     });
     return elements; // NOTE: need to be flattened somewhere in callee
@@ -591,9 +596,8 @@ class PyCodeGen {
 
   reduceVariableDeclarator(node, { binding, init }) {
     if (init === null) {
-      init = PyNone;
+      init = new Identifier("undefined");
     }
-    // TODO: replace with actual var/let/const thing
     return new Assignment(binding, init);
   }
 

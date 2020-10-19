@@ -1335,7 +1335,8 @@ class Scope(object):
                 value = obj[name]
                 values.append(value)
                 fn(name, value)
-        return values
+        # TODO: return JSDictObject instead, or however we'll call it
+        return (names, value)
 
     def declare_var(self, name, value):
         """

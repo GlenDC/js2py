@@ -195,7 +195,18 @@ class StringToken extends Token {
 
 class RawToken extends StringToken {}
 
-class Identifier extends StringToken {}
+class Identifier extends Token {
+  constructor(str) {
+    super();
+    this.str = str;
+  }
+
+  emit(ts, parent, opts) {
+    // TODO: make this scope dynamic
+    const scopeVar = "scope";
+    ts.put(`${scopeVar}["${this.str}"]`);
+  }
+}
 
 class Keyword extends StringToken {}
 
@@ -248,7 +259,7 @@ function renderNumber(n) {
 }
 
 class PythonString extends Token {
-  constructor(str, { delim, isRaw, multiline }) {
+  constructor(str, { delim, isRaw, multiline } = {}) {
     super();
     this.str = str;
     this.delim = delim || `'`;
@@ -551,36 +562,26 @@ class InPlaceOperation extends Token {
   }
 }
 
-class Assignment extends InfixOperation {
+class Assignment extends Token {
   constructor(left, right) {
-    super("=", left, right);
+    super();
+    this.kind = undefined;  // simple assignment if kind if is None
+    this.left = left;
+    this.right = right;
   }
 
   emit(ts, parent, opts) {
-    if (this.right instanceof ByOneOperation) {
-      const statements = [
-        this.right,
-        new Assignment(this.left, this.right.operand),
-      ];
-      if (!this.right.isPrefix) {
-        statements.reverse();
-      }
-      statements[0].emit(ts, this, opts);
-      // we never want to indent first statement in this case,
-      // either not needed, if top-level,
-      // or already done by parent (block)
-      ts.putEOL(opts);
-      // EOL at the end will be put by parent (block);
-      ts.putIndention(opts);
-      statements[1].emit(ts, this, opts);
-    } else {
-      this.left.emit(ts, this, opts);
-      if (this.operator !== ",") {
-        ts.put(" ", opts);
-      }
-      ts.put(`${this.operator} `, opts);
-      this.right.emit(ts, this, opts);
+    let method = 'assign';
+    if (this.kind !== undefined) {
+      method = `declare_${this.kind}`;
     }
+    // TODO: make this scope dynamic
+    const scopeVar = "scope";
+    ts.put(`${scopeVar}.${method}(`);
+    this.left.emit(ts, this, opts);
+    ts.put(`, `);
+    this.right.emit(ts, this, opts);
+    ts.put(")");
   }
 }
 
@@ -834,6 +835,25 @@ class PythonFunctionDef extends Token {
   }
 }
 
+class PythonList extends Token {
+  constructor(...elements) {
+    super();
+
+    this.elements = (elements || []).flat();
+  }
+
+  emit(ts, parent, opts) {
+    ts.put('[');
+    this.elements.forEach((element, index) => {
+      element.emit(ts, this, opts);
+      if (index < this.elements.length-1) {
+        ts.put(', ');
+      }
+    });
+    ts.put(']');
+  }
+}
+
 class TODO extends Token {
   constructor(element, reduceFunc) {
     super();
@@ -847,19 +867,6 @@ class TODO extends Token {
     );
   }
 }
-
-const PyNaN = new CallExpression(
-  // TODO: use and get constructed object from (global) scope
-  new Identifier("JSNaN")
-);
-const PyInf = new CallExpression(
-  // TODO: use and get constructed object from (global) scope
-  // TODO: support negated Infinity
-  new Identifier("JSInfinity")
-);
-
-// TODO: use and get constructed object from (global) scope
-const PyNone = new CallExpression(new Identifier("JSUndefined"));
 
 const PyEmpty = new RawToken("");
 
@@ -902,9 +909,6 @@ module.exports = {
   Block,
 
   // Special Types
-  PyNaN,
-  PyInf,
-  PyNone,
   PyEmpty,
 
   // Other Types
@@ -920,6 +924,7 @@ module.exports = {
 
   // Python Types for special purposes
   PythonFunctionDef,
+  PythonList,
 
   // Token Utilities
   GetPrecedence,
