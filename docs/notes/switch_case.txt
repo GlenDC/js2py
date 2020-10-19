@@ -1,0 +1,88 @@
+A note on which the switch expression part design has been drafted...
+One gotta jot stuff down while waiting for the children to fall asleep (:
+
+---
+
+// Example JS Switch expression
+
+switch (new Date().getDay()) {
+  case 0:
+    day = "Sunday";
+    break;
+  case 1:
+    day = "Monday";
+    break;
+  case 2:
+     day = "Tuesday";
+    break;
+  case 3:
+    day = "Wednesday";
+  case 4:
+    day = "Thursday";
+    break;
+  case 5:
+    day = "Friday";
+    break;
+  case -1:
+  case 6:
+    day = "Saturday";
+    break;
+  default:
+    day = "Unknown";
+}
+
+----
+
+# nice and clean, but difficult with scoping,
+# also quite complex in implementation
+
+with jsswitch(cond) as switch:
+  @switch.case
+  def case_0():
+    day = "Sunday";
+  # ...
+
+----
+
+# simple but very verbose and not clean at all,
+# hard to actually pay attention to the business logic at hand
+
+switch_continue = True
+switch_condition = ...
+if switch_continue and switch_condition == 0:
+  day = "Sunday"
+  switch_continue = False
+if switch_continue and switch_condition == 1:
+  day = "Monday"
+  switch_continue = False
+...
+if switch_continue and switch_condition in [-1, 6]:
+  day = "Saturday"
+  switch_continue = False
+# default
+if switch_continue:
+  day = "Unknown"
+
+---
+
+# clear, simple and easy to focus on the business logic at hand
+
+with JSSwitch(...) as switch:  # <- JSSwitchExit exception is caught as part of this expression
+  if switch.case(0):
+    scope.assign("day", "Sunday")
+    raise JSSwitchExit()
+  if switch.case(1):
+    scope.assign("day", "Monday")
+    raise JSSwitchExit()
+  ...
+  if switch.case(3):
+    scope.assign("day", "Wednesday")
+  if switch.case(4):
+    scope.assign("day", "Thursday")
+    raise JSSwitchExit()
+  ...
+  if switch.case(-1, 6):
+    scope.assign("day", "Saturday")
+    raise JSSwitchExit()
+  # default
+  day = "Unknown"
