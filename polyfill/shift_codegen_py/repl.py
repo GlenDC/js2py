@@ -29,7 +29,7 @@ class REPL:
 
     def __init__(self, history_fp=None):
         self._prelude_cmds = [
-            # NOTE: implicitly relies on the fact that shift-codegen_py is installed
+            # NOTE: implicitly relies on the fact that shift_codegen_py is installed
             # in a linked modus operandes
             "from shift_codegen_py.polyfill import *",  # required first command
         ]
