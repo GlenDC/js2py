@@ -555,7 +555,7 @@ class InPlaceOperation extends Token {
         throw new Error(`unexpected binary in-place operator ${this.operator}`);
       }
       return new CallExpression(
-        new PropertyGetterExpression(this.left, new Identifier(fnName)),
+        new PropertyGetterExpression(this.left, new RawToken(fnName)),
         this.right
       ).emit(ts, this, opts);
     }
@@ -603,7 +603,7 @@ class ByOneOperation extends Token {
       this.operator === "+" ? "inc" : "dec"
     }`;
     new CallExpression(
-      new PropertyGetterExpression(this.operand, new Identifier(fname))
+      new PropertyGetterExpression(this.operand, new RawToken(fname))
     ).emit(ts, this, opts);
   }
 }
@@ -690,7 +690,7 @@ class WhileExpression extends Token {
 class ForExpression extends Token {
   constructor(init, test, update, body) {
     super();
-    this.init = (init || []).flat();
+    this.init = ([init] || []).flat();
     this.test = test;
     this.body = body instanceof Block ? body : new Block([body]);
     if (update) {
@@ -798,6 +798,97 @@ class IfExpression extends Token {
   }
 }
 
+class SwitchExpression extends Token {
+  constructor(condition, cases, defaultCase) {
+    super();
+
+    this.condition = condition;
+    this.cases = cases || [];
+    this.defaultCase = defaultCase;
+  }
+
+  emit(ts, parent, opts) {
+    ts.put('with JSSwitch(');
+    this.condition.emit(ts, this, opts);
+    ts.put(') as switch:')
+    ts.putEOL()
+
+    const bodyElements = this.cases;
+    if (this.defaultCase) {
+      bodyElements.push(new Comment('default'));
+      bodyElements.push(this.defaultCase);
+    }
+
+    const body = new Block(bodyElements);
+    body.emit(
+      ts,
+      this,
+      Object.assign(Object.assign({}, opts), {
+        lineIndention: (opts.lineIndention || 0) + 1,
+      })
+    );
+  }
+}
+
+class SwitchCaseExpressionBody extends Token {
+  constructor(body) {
+    super();
+
+    this.body = body instanceof Block ? body : new Block([body].flat());
+  }
+
+  emit(ts, parent, opts) {
+    if (parent instanceof SwitchCaseExpression) {
+      this.body.emit(ts, this, opts);
+    } else {
+      this.body.lines.forEach(line => {
+        line.emit(ts, this, opts);
+      });
+    }
+  }
+}
+
+class SwitchCaseExpression extends SwitchCaseExpressionBody {
+  constructor(body, ...conditions) {
+    super(body);
+
+    this.conditions = (conditions || []).flat();
+  }
+
+  emit(ts, parent, opts) {
+    const expression = new IfExpression(
+      new CallExpression(
+        new StringToken('switch.case'),
+        ...this.conditions,
+      ),
+      this.body,
+    );
+    expression.emit(ts, this, opts);
+  }
+}
+
+class BreakStatement extends Token {
+  constructor(asException) {
+    super();
+
+    this.asException = asException;
+  }
+
+  emit(ts, parent, opts) {
+    if (this.asException) {
+      ts.put('raise JSBreak()');
+    } else {
+      ts.put('break');
+    }
+  }
+}
+
+class ContinueStatement extends StringToken {
+  constructor() {
+    super('continue');
+  }
+}
+
 class PythonFunctionDef extends Token {
   constructor(name, body, { args, varg, kwargs } = {}) {
     super();
@@ -901,6 +992,15 @@ module.exports = {
   CallExpression,
   PropertyGetterExpression,
   TemplateExpression,
+
+  // Switch Expression
+  SwitchExpression,
+  SwitchCaseExpression,
+  SwitchCaseExpressionBody,
+
+  // Control statements
+  BreakStatement,
+  ContinueStatement,
 
   // Reference Related Types
   Identifier,

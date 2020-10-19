@@ -25,6 +25,13 @@ const {
   CallExpression,
   PropertyGetterExpression,
   TemplateExpression,
+  // Switch Expression
+  SwitchExpression,
+  SwitchCaseExpression,
+  SwitchCaseExpressionBody,
+  // Control Statements
+  BreakStatement,
+  ContinueStatement,
   // Reference Related Types
   Identifier,
   // Scope Types
@@ -90,16 +97,17 @@ class PyCodeGen {
   //   return original;
   // }
 
-  reduceArrayAssignmentTarget(node, elements) {
-    return new TODO(node, "reduceArrayAssignmentTarget");
+  reduceArrayAssignmentTarget(node, { elements }) {
+    return new PythonList(elements);
   }
 
   reduceArrayBinding(node, elements) {
     return new TODO(node, "reduceArrayBinding");
   }
 
-  reduceArrayExpression(node, elements) {
-    return new TODO(node, "reduceArrayExpression");
+  reduceArrayExpression(node, { elements }) {
+    // TODO: Return as a `List` (JSList) object instead!!!
+    return new PythonList(elements);
   }
 
   reduceArrowExpression(node, elements) {
@@ -182,7 +190,7 @@ class PyCodeGen {
   }
 
   reduceBreakStatement(node, elements) {
-    return new TODO(node, "reduceBreakStatement");
+    return new BreakStatement();
   }
 
   reduceCallExpression(node, { callee, arguments: args }) {
@@ -207,6 +215,10 @@ class PyCodeGen {
 
   reduceCompoundAssignmentExpression(node, { binding, expression }) {
     // to keep things simple, use a regular assignment + infix operation
+    if (binding instanceof PythonString) {
+      // TODO: this is a dirty hack as somewhere this is going wrong
+      binding = new Identifier(binding.str);
+    }
     return new InPlaceOperation(
       node.operator.slice(0, -1),
       binding,
@@ -231,7 +243,7 @@ class PyCodeGen {
   }
 
   reduceContinueStatement(node, elements) {
-    return new TODO(node, "reduceContinueStatement");
+    return new ContinueStatement();
   }
 
   reduceDataProperty(node, elements) {
@@ -526,20 +538,50 @@ class PyCodeGen {
     return new TODO(node, "reduceSuper");
   }
 
-  reduceSwitchCase(node, elements) {
-    return new TODO(node, "reduceSwitchCase");
+  reduceSwitchCase(node, { test, consequent }) {
+    // mark break statement as exception, to make it work in our Python runtime
+    (consequent || []).forEach(c => {
+      if (c instanceof BreakStatement) {
+        c.asException = true;
+      }
+    });
+    return new SwitchCaseExpression(consequent, test);
   }
 
-  reduceSwitchDefault(node, elements) {
-    return new TODO(node, "reduceSwitchDefault");
+  reduceSwitchDefault(node, { consequent }) {
+    (consequent || []).forEach(c => {
+      if (c instanceof BreakStatement) {
+        c.asException = true;
+      }
+    });
+    return new SwitchCaseExpressionBody(consequent);
   }
 
-  reduceSwitchStatement(node, elements) {
-    return new TODO(node, "reduceSwitchStatement");
+  reduceSwitchStatement(node, { discriminant, cases }) {
+    return this._reduceSwitchStatement(discriminant, cases);
   }
 
-  reduceSwitchStatementWithDefault(node, elements) {
-    return new TODO(node, "reduceSwitchStatementWithDefault");
+  reduceSwitchStatementWithDefault(node, { discriminant, preDefaultCases, defaultCase, postDefaultCases }) {
+    return this._reduceSwitchStatement(
+      discriminant,
+      (preDefaultCases || []).concat(postDefaultCases || []),
+      defaultCase);
+  }
+
+  _reduceSwitchStatement(discriminant, inputCases, defaultCase) {
+    const cases = [];
+    (inputCases || []).reverse().forEach(c => {
+      if (cases.length > 0 && c.body.lines.length === 0) {
+        cases[cases.length - 1].conditions.push(...c.conditions);
+      } else {
+        cases.push(c);
+      }
+    });
+    return new SwitchExpression(
+      discriminant,
+      cases.reverse(),
+      defaultCase,
+    );
   }
 
   reduceTemplateElement(node, elements) {
@@ -571,6 +613,10 @@ class PyCodeGen {
   }
 
   reduceUpdateExpression(node, { operand }) {
+    if (operand instanceof PythonString) {
+      // TODO: this is a hack, at some point this is going horribly wrong
+      operand = new Identifier(operand.str);
+    }
     switch (node.operator) {
       case "++":
         return new ByOneOperation("+", operand, node.isPrefix);
