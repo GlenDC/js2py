@@ -1,8 +1,8 @@
 """
-Polyfills Javascript's switch statement and all its bells.
+Polyfills Javascript's statements such as switch.
 """
 
-class JSSwitchExit(Exception):
+class JSBreak(Exception):
   """
   Exception used to "break" out of a switch statement
   """
@@ -15,7 +15,7 @@ class JSSwitch:
     return self
 
   def __exit__(self, exc_type, exc_value, traceback):
-    return exc_type is JSSwitchExit
+    return exc_type is JSBreak
 
   def case(self, *conditions):
     return self.__condition in conditions
@@ -30,7 +30,7 @@ def nt(x):
       return 'HIGH!!!'
     if switch.case(5, 6, 7):
       description += 'mid'
-      raise JSSwitchExit()
+      raise JSBreak()
     if switch.case(1, 2, 3, 4):
       description += 'low or '
     description += 'whatever'

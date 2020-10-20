@@ -4,8 +4,8 @@ from .errors import *
 # JS Objects (including primitives) and scoping types.
 from .runtime import *
 
-# JS Switch Polyfill logic.
-from .switch import *
+# JS statements Polyfill code such as the switch.
+from .statements import *
 
 # Objects expected that they might as well be built-in,
 # such as console and window.
